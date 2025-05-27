@@ -7,6 +7,7 @@
   },
   "dependencies": {
     "htm": "^3.1.1",
+    "jsqr": "git+https://codeberg.org/blinry/jsQR-with-modules.git",
     "preact": "^10.26.7"
   },
   "devDependencies": {
