@@ -2,11 +2,13 @@
  * Utility for converting our internal table object into HTML that can be pasted into Google Sheets.
  */
 
+import { assert } from "./util";
+
 export type Cell = {
     width?: number;
     height?: number;
-    backgroundColor?: string;
-    formula?: string; // e.g. "=R[0]C[1]" (relative indices to current cell)
+    backgroundColor?: number;
+    formula?: string;
     text?: string;
 
     /*
@@ -22,13 +24,8 @@ export type Cell = {
 export type Table = Cell[][];
 
 const refRegex = "[A-Za-z0-9_]+";
-const numberRegex = "-?[0-9]{1-3}";
-
-function assert(test: any, error: string) {
-    if (!test) {
-        throw new Error(error);
-    }
-}
+const numberRegex = "-?[0-9]{1,3}";
+const colors = ["", "#f4cccc", "", "", "#d9ead3", "", "", "#cfe2f3", "", ""];
 
 export function toHtml(html: any, table: Table) {
     const refs = new Map();
@@ -55,9 +52,10 @@ export function toHtml(html: any, table: Table) {
                 style += `max-height:${cell.height}px;`;
             }
             if (cell.backgroundColor) {
-                style += `background-color:${cell.backgroundColor};`;
+                style += `background-color:${colors[cell.backgroundColor]};`;
             }
 
+            // replace %ref% in the formula with e.g. R[0]C[1]
             let formula = cell.formula;
             let match;
             while (formula) {
@@ -76,8 +74,8 @@ export function toHtml(html: any, table: Table) {
                     if (refs.has(ref)) {
                         const [other_r, other_c] = refs.get(ref);
                         formula = formula.replace(
-                            `%${ref}[${r}][${c}]%`,
-                            `R[${other_r - r + dr}][${other_c - c + dc}]`
+                            `%${ref}[${dr}][${dc}]%`,
+                            `R[${other_r - r + dr}]C[${other_c - c + dc}]`
                         );
                         continue;
                     }
