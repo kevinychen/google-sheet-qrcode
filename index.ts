@@ -1,22 +1,9 @@
 import htm from "htm";
-import jsQR, { QRCode } from "jsqr";
+import jsQR from "jsqr";
 import { h, render } from "preact";
 import { useState } from "preact/hooks";
-
-type BinaryGrid = (0 | 1)[][];
-
-function toBinaryGrid(qrCode: QRCode): BinaryGrid {
-    const matrix = qrCode.modules;
-    const result: BinaryGrid = [];
-    for (let y = 0; y < matrix.height; y++) {
-        const row: (0 | 1)[] = [];
-        for (let x = 0; x < matrix.width; x++) {
-            row.push(matrix.get(x, y) ? 1 : 0);
-        }
-        result.push(row);
-    }
-    return result;
-}
+import { toHtml } from "./google-sheet-html";
+import { BinaryGrid, toBinaryGrid, toTable } from "./qr";
 
 const html = htm.bind(h);
 
@@ -64,66 +51,7 @@ function ImageInput({ setGrid }: ImageInputProps) {
     `;
 }
 
-type OutputCellProps = {
-    // e.g. "=R[0]C[1]" (relative indices to current cell)
-    formula?: string;
-    text?: string;
-    width?: number;
-    backgroundColor?: string;
-};
-function OutputCell({ formula, text, width, backgroundColor }: OutputCellProps) {
-    let style = "";
-    if (width) {
-        style += `width:${width}px;`;
-    }
-    if (backgroundColor) {
-        style += `background-color:${backgroundColor};`;
-    }
-    return html` <td style=${style} data-sheets-formula=${formula}>${text}</td> `;
-}
-
-type OutputRowProps = { height?: number; cells?: preact.ComponentChildren };
-function OutputRow({ height, cells }: OutputRowProps) {
-    let style = "";
-    if (height) {
-        style += `height:${height}px;`;
-    }
-    return html`
-        <tr style=${style}>
-            ${cells}
-        </tr>
-    `;
-}
-
-type OutputGridProps = { grid: BinaryGrid | null };
-function OutputGrid({ grid }: OutputGridProps) {
-    if (grid === null) {
-        return;
-    }
-
-    const rows = [];
-    for (let y = 0; y < grid.length; y++) {
-        const cells = [];
-        for (let x = 0; x < grid[y].length; x++) {
-            cells.push(html`<${OutputCell} width=${20} text=${grid[y][x] ? "⬛" : undefined} />`);
-        }
-        rows.push(html`<${OutputRow} height=${20} cells=${cells} />`);
-    }
-    return html`
-        <div id="output-grid">
-            <google-sheets-html-origin>
-                <table cellspacing="0" cellpadding="0" style="font-size:10pt;">
-                    <tbody>
-                        ${rows}
-                    </tbody>
-                </table>
-            </google-sheets-html-origin>
-        </div>
-    `;
-}
-
-type CopyToClipboardProps = { visible: boolean };
-function CopyToClipboard({ visible }: CopyToClipboardProps) {
+function CopyToClipboard() {
     const [copying, setCopying] = useState(false);
     const handleClick = () => {
         const html = document.getElementById("output-grid")!.innerHTML;
@@ -134,9 +62,7 @@ function CopyToClipboard({ visible }: CopyToClipboardProps) {
             setTimeout(() => setCopying(false), 3000);
         });
     };
-    if (visible) {
-        return html`<button onClick="${handleClick}">${copying ? "Copied!" : "Copy to clipboard"}</button>`;
-    }
+    return html`<button onClick="${handleClick}">${copying ? "Copied!" : "Copy to clipboard"}</button>`;
 }
 
 const sampleGrid: BinaryGrid = [
@@ -166,12 +92,11 @@ const sampleGrid: BinaryGrid = [
 function App() {
     const [grid, setGrid] = useState(sampleGrid);
 
-    return html`
-        <div>
-            <${ImageInput} setGrid=${setGrid} />
-            <${OutputGrid} grid=${grid} />
-            <${CopyToClipboard} visible=${grid !== undefined} />
-        </div>
-    `;
+    const nodes = [html`<${ImageInput} setGrid=${setGrid} />`];
+    if (grid) {
+        nodes.push(toHtml(html, toTable(grid)));
+        nodes.push(html`<${CopyToClipboard} />`);
+    }
+    return nodes;
 }
 render(html`<${App} />`, document.body);
