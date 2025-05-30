@@ -19,7 +19,7 @@ export function toBinaryGrid(qrCode: QRCode): BinaryGrid {
 }
 
 function char(bit: Bit) {
-    return bit ? "⬛" : undefined;
+    return bit ? "⬛" : "";
 }
 
 function BCH_encode(bits: number) {
@@ -50,6 +50,15 @@ export function toTable(grid: BinaryGrid): Table {
             text: "← black character",
         },
     ]);
+    rows.push([
+        {
+            text: char(0),
+            ref: "WHITE",
+        },
+        {
+            text: "← white character",
+        },
+    ]);
     rows.push([{}]);
 
     const formatRows: Table = [];
@@ -57,7 +66,7 @@ export function toTable(grid: BinaryGrid): Table {
         formatRows.push(
             row.map((bit, c) => ({
                 text: char(bit),
-                formula: bit ? "=%BLACK%" : undefined,
+                formula: bit ? "=%BLACK%" : "=%WHITE%",
                 ref: r === 0 && c === 0 ? "CODE" : undefined,
             }))
         );
@@ -80,7 +89,7 @@ export function toTable(grid: BinaryGrid): Table {
     formatAnnotations.push(
         indices.map((c, i) => ({
             text: horizontalBits[i].toString(),
-            formula: '=IF(R[-1]C[0]<>"",1,0)',
+            formula: "=IF(R[-1]C[0]<>%WHITE%, 1, 0)",
             ref: i === 0 ? "HORIZONTAL_BITS" : undefined,
         }))
     );
@@ -100,7 +109,7 @@ export function toTable(grid: BinaryGrid): Table {
     formatAnnotations.push(
         indices.map((c, i) => ({
             text: verticalBits[i].toString(),
-            formula: '=IF(R[-1]C[0]<>"",1,0)',
+            formula: "=IF(R[-1]C[0]<>%WHITE%, 1, 0)",
             ref: i === 0 ? "VERTICAL_BITS" : undefined,
         }))
     );
@@ -118,12 +127,12 @@ export function toTable(grid: BinaryGrid): Table {
     const bestOption = BCH_options[bestIndex];
     const formatBits = range(15).map(i => ((bestOption >> (14 - i)) % 2) as Bit);
     formatAnnotations.push([]);
-    formatAnnotations.push([{ text: "After format information error correction:" }]);
+    formatAnnotations.push([{ text: "Format information after error correction:" }]);
     formatAnnotations.push(
         formatBits.map((bit, i) => ({
             backgroundColor: colors[i],
             text: char(bit),
-            formula: `=IF(%FORMAT[0][${i}]%<>"0", %BLACK%, "")`,
+            formula: `=IF(%FORMAT[0][${i}]%<>0, %BLACK%, %WHITE%)`,
         }))
     );
     formatAnnotations.push([
@@ -161,7 +170,7 @@ export function toTable(grid: BinaryGrid): Table {
         ...formatBits.slice(0, 2).map((bit, i) => ({
             backgroundColor: 1,
             text: char(bit),
-            formula: `=IF(%FORMAT[0][${i}]%<>"0", %BLACK%, "")`,
+            formula: `=IF(%FORMAT[0][${i}]%<>0, %BLACK%, %WHITE%)`,
         })),
         {
             text: errorCorrectionLevel,
@@ -169,6 +178,7 @@ export function toTable(grid: BinaryGrid): Table {
                 .split("")
                 .map(c => `"${c}"`)
                 .join("; ")}}, %FORMAT% * 2 + %FORMAT[0][1]% + 1)`,
+            ref: "EC_LEVEL",
         },
         ...range(4).map(_ => ({})),
         {
@@ -180,30 +190,47 @@ export function toTable(grid: BinaryGrid): Table {
                 .join("; ")}}, %FORMAT% * 2 + %FORMAT[0][1]% + 1)`,
         },
     ]);
+    const mask = parseInt(formatBits.slice(2, 5).join(""), 2);
     formatAnnotations.push([
         {},
         {},
         ...formatBits.slice(2, 5).map((bit, i) => ({
             backgroundColor: 4,
             text: char(bit),
-            formula: `=IF(%FORMAT[0][${i + 2}]%<>"0", %BLACK%, "")`,
+            formula: `=IF(%FORMAT[0][${i + 2}]%<>0, %BLACK%, %WHITE%)`,
         })),
         {
-            text: formatBits.slice(2, 5).join(""),
-            formula: "=CONCATENATE(%FORMAT[0][2]%, %FORMAT[0][3]%, %FORMAT[0][4]%)",
+            text: mask.toString(),
+            formula: "=%FORMAT[0][2]% * 4 + %FORMAT[0][3]% * 2 + %FORMAT[0][4]%",
+            ref: "MASK",
         },
         {},
         {
             text: "Mask:",
         },
     ]);
-    formatAnnotations.push([]);
 
     // Mask
-    const masks = {
-        "111": "",
-    };
-    for (let i = 0; i < 6; i++) {}
+    const masks = [
+        "111111 100000 100100 101010 110010 010000",
+        "101010 010101 101010 101010 010101 101010",
+        "101010 000111 100011 010101 111000 011100",
+        "111111 111000 110110 101010 101101 100011",
+        "111111 000000 111111 000000 111111 000000",
+        "101010 010101 101010 010101 101010 010101",
+        "100100 001001 010010 100100 001001 010010",
+        "100100 100100 100100 100100 100100 100100",
+    ].map(s => s.split(" ").map(array => array.split("").map(c => parseInt(c) as Bit)));
+    for (let i = 0; i < 6; i++) {
+        formatAnnotations.push([
+            ...range(7).map(_ => ({})),
+            ...range(6).map(j => ({
+                backgroundColor: 4,
+                text: char(masks[mask][i][j]),
+                formula: `=INDEX({${masks.map(mask => `"${char(mask[i][j])}"`).join("; ")}}, %MASK% + 1)`,
+            })),
+        ]);
+    }
 
     formatAnnotations.forEach((row, i) => formatRows[i].push({}, ...row));
 
