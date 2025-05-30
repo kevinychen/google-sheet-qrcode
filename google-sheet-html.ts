@@ -8,8 +8,8 @@ export type Cell = {
     width?: number;
     height?: number;
     backgroundColor?: number;
-    formula?: string;
     text?: string;
+    formula?: string;
 
     /*
      * If another cell's formula contains the substring "%<ref>%", then it will be replaced with
