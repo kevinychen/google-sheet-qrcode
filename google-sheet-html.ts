@@ -16,16 +16,16 @@ export type Cell = {
      * R[?]C[?] corresponding to this cell. If a formula contains the substring "%<ref>%[r][c]",
      * then it will be replaced with the cell r rows down and c columns right from this one.
      *
-     * All refs should be distinct, and only letters, numbers, and underscores are allowed.
+     * All refs should be distinct. Only uppercase letters, numbers, and underscores are allowed.
      */
     ref?: string;
 };
 
 export type Table = Cell[][];
 
-const refRegex = "[A-Za-z0-9_]+";
+const refRegex = "[A-Z0-9_]+";
 const numberRegex = "-?[0-9]{1,3}";
-const colors = ["", "#f4cccc", "", "", "#d9ead3", "", "", "#cfe2f3", "", ""];
+const colors = ["#e6b8af", "#f4cccc", "", "", "#d9ead3", "", "", "#cfe2f3", "", "", "#d9d9d9"];
 
 export function toHtml(html: any, table: Table) {
     const refs = new Map();
@@ -43,15 +43,15 @@ export function toHtml(html: any, table: Table) {
     const rows = table.map((row, r) => {
         const cells = row.map((cell, c) => {
             let style = "white-space:nowrap;";
-            if (cell.width) {
+            if (cell.width !== undefined) {
                 style += `width:${cell.width}px;`;
                 style += `max-width:${cell.width}px;`;
             }
-            if (cell.height) {
+            if (cell.height !== undefined) {
                 style += `height:${cell.height}px;`;
                 style += `max-height:${cell.height}px;`;
             }
-            if (cell.backgroundColor) {
+            if (cell.backgroundColor !== undefined) {
                 style += `background-color:${colors[cell.backgroundColor]};`;
             }
 
