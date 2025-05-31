@@ -4,7 +4,7 @@ export function assert(test: any, error?: string) {
     }
 }
 
-export function blockMatrix<T>(blocks: (T[][] | T)[][], padding: T): T[][] {
+export function blockMatrix<T extends {}>(blocks: (T[][] | {})[][]): T[][] {
     const blockMatrix: T[][] = [];
 
     for (const originalRow of blocks) {
@@ -21,7 +21,7 @@ export function blockMatrix<T>(blocks: (T[][] | T)[][], padding: T): T[][] {
                 const maxWidth = Math.max(...block.map(row => row.length));
                 for (const row of paddedBlock) {
                     while (row.length < maxWidth) {
-                        row.push(padding);
+                        row.push({});
                     }
                 }
             }

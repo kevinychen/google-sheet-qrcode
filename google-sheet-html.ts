@@ -25,7 +25,22 @@ export type Table = Cell[][];
 
 const refRegex = "[A-Z0-9_]+";
 const numberRegex = "-?[0-9]{1,3}";
-const colors = ["#e6b8af", "#f4cccc", "", "", "#d9ead3", "", "", "#cfe2f3", "", "", "#d9d9d9"];
+const colors = [
+    /* 10 rainbow colors */
+    "#e6b8af",
+    "#f4cccc",
+    "#fce5cd",
+    "#fff2cc",
+    "#d9ead3",
+    "#d0e0e3",
+    "#c9daf8",
+    "#cfe2f3",
+    "#d9d2e9",
+    "#ead1dc",
+
+    /* gray */
+    "#999999",
+];
 
 export function toHtml(html: any, table: Table) {
     const refs = new Map();

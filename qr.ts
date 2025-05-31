@@ -4,8 +4,23 @@ import { assert, blockMatrix, range } from "./util";
 
 export type Bit = 0 | 1;
 export type BinaryGrid = Bit[][];
+export type FormatCoordinates = { horizontal: [number, number][]; vertical: [number, number][] };
+export type ErrorCorrectionLevel = { name: string; description: string };
+export type EncodingMode = { code: string; description: string; blockSize: number };
 
-const errorCorrectionLevels = "HQML";
+const errorCorrectionLevels = [
+    { name: "H", description: "HIGH" },
+    { name: "Q", description: "QUARTILE" },
+    { name: "M", description: "MEDIUM" },
+    { name: "L", description: "LOW" },
+];
+const encodingModes = [
+    { code: "1000", description: "Numeric", blockSize: 10 },
+    { code: "0100", description: "Alphanumeric", blockSize: 11 },
+    { code: "0010", description: "Byte", blockSize: 8 },
+    { code: "0001", description: "Kanji", blockSize: 13 },
+    { code: "?", description: "Unknown", blockSize: 8 },
+];
 
 export function toBinaryGrid(qrCode: QRCode): BinaryGrid {
     const matrix = qrCode.modules;
@@ -24,7 +39,7 @@ function char(bit: Bit) {
     return bit ? "⬛" : "";
 }
 
-function toOriginalQRCode(originalQRCode: BinaryGrid): Table {
+function showOriginalQRCode(originalQRCode: BinaryGrid): Table {
     return originalQRCode.map((row, r) =>
         row.map((bit, c) => ({
             text: char(bit),
@@ -34,9 +49,19 @@ function toOriginalQRCode(originalQRCode: BinaryGrid): Table {
     );
 }
 
-function getFormatBits(code: BinaryGrid, L: number, originalQRCodeTable: Table): { formatBits: Bit[]; table: Table } {
-    const colors = [1, 1, 4, 4, 4, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7];
+function getFormatCoordinates(L: number): FormatCoordinates {
+    return {
+        horizontal: [0, 1, 2, 3, 4, 5, 7, L - 8, L - 7, L - 6, L - 5, L - 4, L - 3, L - 2, L - 1].map(c => [8, c]),
+        vertical: [L - 1, L - 2, L - 3, L - 4, L - 5, L - 6, L - 7, 8, 7, 5, 4, 3, 2, 1, 0].map(r => [r, 8]),
+    };
+}
 
+function getFormatBits(
+    code: BinaryGrid,
+    originalQRCodeTable: Table,
+    formatCoordinates: FormatCoordinates
+): { formatBits: Bit[]; table: Table } {
+    const colors = [1, 1, 4, 4, 4, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7];
     function BCH_encode(bits: number) {
         const upperMask = 0b10101;
         const lowerMask = 0b10010;
@@ -56,17 +81,16 @@ function getFormatBits(code: BinaryGrid, L: number, originalQRCodeTable: Table):
 
     const table = [];
 
-    const indices = [0, 1, 2, 3, 4, 5, 7, 8, L - 7, L - 6, L - 5, L - 4, L - 3, L - 2, L - 1];
-    const horizontalBits = indices.map(c => code[8][c]);
-    table.push([{ text: "Horizontal format information (masked):" }]);
+    const horizontalBits = formatCoordinates.horizontal.map(([r, c]) => code[r][c]);
+    table.push([{ text: "Horizontal format information:" }]);
     table.push(
-        indices.map((c, i) => ({
+        formatCoordinates.horizontal.map(([r, c], i) => ({
             backgroundColor: colors[i],
             text: char(horizontalBits[i]),
-            formula: `=%ORIGINAL_QR_CODE[8][${c}]%`,
+            formula: `=%ORIGINAL_QR_CODE[${r}][${c}]%`,
         }))
     );
-    indices.forEach((c, i) => (originalQRCodeTable[8][c].backgroundColor = colors[i]));
+    formatCoordinates.horizontal.forEach(([r, c], i) => (originalQRCodeTable[r][c].backgroundColor = colors[i]));
     table.push(
         horizontalBits.map((bit, i) => ({
             text: bit.toString(),
@@ -75,18 +99,17 @@ function getFormatBits(code: BinaryGrid, L: number, originalQRCodeTable: Table):
         }))
     );
 
-    indices.reverse();
-    const verticalBits = indices.map(c => code[c][8]);
+    const verticalBits = formatCoordinates.vertical.map(([r, c]) => code[r][c]);
     table.push([]);
-    table.push([{ text: "Vertical format information (masked):" }]);
+    table.push([{ text: "Vertical format information:" }]);
     table.push(
-        indices.map((c, i) => ({
+        formatCoordinates.vertical.map(([r, c], i) => ({
             backgroundColor: colors[i],
             text: char(verticalBits[i]),
-            formula: `=%ORIGINAL_QR_CODE[${c}][8]%`,
+            formula: `=%ORIGINAL_QR_CODE[${r}][${c}]%`,
         }))
     );
-    indices.forEach((c, i) => (originalQRCodeTable[c][8].backgroundColor = colors[i]));
+    formatCoordinates.vertical.forEach(([r, c], i) => (originalQRCodeTable[r][c].backgroundColor = colors[i]));
     table.push(
         verticalBits.map((bit, i) => ({
             text: bit.toString(),
@@ -94,7 +117,6 @@ function getFormatBits(code: BinaryGrid, L: number, originalQRCodeTable: Table):
             ref: i === 0 ? "VERTICAL_BITS" : undefined,
         }))
     );
-    indices.forEach((c, i) => (originalQRCodeTable[c][8].backgroundColor = colors[i]));
 
     // The 15 bits in both the horizontal format information and vertical format information are
     // encoded with a BCH(15, 5) code. Find the option (out of 2^5 options) that has the closest
@@ -112,20 +134,24 @@ function getFormatBits(code: BinaryGrid, L: number, originalQRCodeTable: Table):
         {
             text: bestOptionIndex.toString(),
             formula: `=LET(
-                comment1, "Convert input bits to integer (big endian)",
-                powers, SEQUENCE(15, 1, 14, -1),
-                horizontalBits, {${indices.map((_, i) => `%HORIZONTAL_BITS[0][${i}]%`).join("; ")}},
-                verticalBits, {${indices.map((_, i) => `%VERTICAL_BITS[0][${i}]%`).join("; ")}},
-                horizontalInt, SUM(ARRAYFORMULA(horizontalBits * 2^powers)),
-                verticalInt, SUM(ARRAYFORMULA(verticalBits * 2^powers)),
+comment1, "Convert input bits to integer (big endian)",
+powers, SEQUENCE(15, 1, 14, -1),
+horizontalBits, {${range(15)
+                .map(i => `%HORIZONTAL_BITS[0][${i}]%`)
+                .join("; ")}},
+verticalBits, {${range(15)
+                .map(i => `%VERTICAL_BITS[0][${i}]%`)
+                .join("; ")}},
+horizontalInt, SUM(ARRAYFORMULA(horizontalBits * 2^powers)),
+verticalInt, SUM(ARRAYFORMULA(verticalBits * 2^powers)),
 
-                comment2, "Find the valid option with the smallest Hamming distance",
-                options, {${BCH_options.join(", ")}},
-                hamming, MAP(options, LAMBDA(val, LEN(SUBSTITUTE(
-                    BASE(BITXOR(horizontalInt, val), 2) & BASE(BITXOR(verticalInt, val), 2), "0", "")))),
-                bestOptionIndex, XMATCH(MIN(hamming), hamming) - 1,
-                bestOptionIndex
-                )`,
+comment2, "Find the valid option with the smallest Hamming distance",
+options, {${BCH_options.join(", ")}},
+hamming, MAP(options, LAMBDA(val, LEN(SUBSTITUTE(
+    BASE(BITXOR(horizontalInt, val), 2) & BASE(BITXOR(verticalInt, val), 2), "0", "")))),
+bestOptionIndex, XMATCH(MIN(hamming), hamming) - 1,
+bestOptionIndex
+)`,
             ref: "BEST_OPTION_INDEX",
         },
     ]);
@@ -137,7 +163,7 @@ function getFormatBits(code: BinaryGrid, L: number, originalQRCodeTable: Table):
         range(15).map(i => ({
             backgroundColor: colors[i],
             text: char(formatBits[i]),
-            formula: `=INDEX({${BCH_options.map(option => `"${char(((option >> (14 - i)) % 2) as Bit)}"`).join(
+            formula: `=INDEX({${BCH_options.map(option => ((option >> (14 - i)) % 2 ? "%BLACK%" : "%WHITE%")).join(
                 "; "
             )}}, %BEST_OPTION_INDEX% + 1)`,
         }))
@@ -153,8 +179,11 @@ function getFormatBits(code: BinaryGrid, L: number, originalQRCodeTable: Table):
     return { formatBits, table };
 }
 
-function getErrorCorrectionLevel(formatBits: Bit[]): { errorCorrectionLevel: string; table: Table; description: Cell } {
-    const words = ["H (HIGH)", "Q (QUARTILE)", "M (MEDIUM)", "L (LOW)"];
+function getErrorCorrectionLevel(formatBits: Bit[]): {
+    errorCorrectionLevel: ErrorCorrectionLevel;
+    table: Table;
+    description: Cell;
+} {
     const errorCorrectionLevel = errorCorrectionLevels[parseInt(formatBits.slice(0, 2).join(""), 2)];
 
     return {
@@ -163,10 +192,9 @@ function getErrorCorrectionLevel(formatBits: Bit[]): { errorCorrectionLevel: str
             [
                 {
                     backgroundColor: 1,
-                    text: errorCorrectionLevel,
+                    text: errorCorrectionLevel.name,
                     formula: `=INDEX({${errorCorrectionLevels
-                        .split("")
-                        .map(c => `"${c}"`)
+                        .map(level => `"${level.name}"`)
                         .join("; ")}}, BIN2DEC(CONCATENATE(%FORMAT_BITS%:%FORMAT_BITS[0][1]%)) + 1)`,
                     ref: "ERROR_CORRECTION_LEVEL",
                 },
@@ -176,13 +204,10 @@ function getErrorCorrectionLevel(formatBits: Bit[]): { errorCorrectionLevel: str
             ],
         ],
         description: {
-            text: `Grid error correction: ${words[errorCorrectionLevels.indexOf(errorCorrectionLevel)]}`,
-            formula: `="Grid error correction: " & INDEX({${words
-                .map(word => `"${word}"`)
-                .join("; ")}}, XMATCH(%ERROR_CORRECTION_LEVEL%, {${errorCorrectionLevels
-                .split("")
-                .map(c => `"${c}"`)
-                .join("; ")}}))`,
+            text: `Error correction: ${errorCorrectionLevel.name} (${errorCorrectionLevel.description})`,
+            formula: `="Error correction: " & %ERROR_CORRECTION_LEVEL% & " (" & SWITCH(%ERROR_CORRECTION_LEVEL%, ${errorCorrectionLevels
+                .map(level => `"${level.name}", "${level.description}"`)
+                .join(", ")}) & ")"`,
         },
     };
 }
@@ -236,14 +261,16 @@ function getMaskGrid(maskIndex: number): { maskGrid: BinaryGrid; table: Table } 
             range(6).map(c => ({
                 backgroundColor: 4,
                 text: char(maskGrid[r][c]),
-                formula: `=INDEX({${masks.map(mask => `"${char(mask[r][c])}"`).join("; ")}}, %MASK_INDEX% + 1)`,
+                formula: `=INDEX({${masks
+                    .map(mask => (mask[r][c] ? "%BLACK%" : "%WHITE%"))
+                    .join("; ")}}, %MASK_INDEX% + 1)`,
                 ref: r === 0 && c === 0 ? "MASK_GRID" : undefined,
             }))
         ),
     };
 }
 
-function getDataAreas(L: number): boolean[][] {
+function getDataAreas(L: number, formatCoordinates: FormatCoordinates): boolean[][] {
     const version = (L - 17) / 4;
 
     const dataAreas: boolean[][] = range(L).map(_ => range(L).map(_ => true));
@@ -285,7 +312,47 @@ function getDataAreas(L: number): boolean[][] {
             }
         }
     }
+
+    // Remove format information
+    formatCoordinates.horizontal.forEach(([r, c]) => (dataAreas[r][c] = false));
+    formatCoordinates.vertical.forEach(([r, c]) => (dataAreas[r][c] = false));
+
+    // Pixel that's always black
+    dataAreas[L - 8][8] = false;
+
     return dataAreas;
+}
+
+function getDataCoordinates(L: number, dataAreas: boolean[][]): [number, number][] {
+    const dataCoordinates: [number, number][] = [];
+
+    // https://en.wikipedia.org/wiki/QR_code#/media/File:QR_Character_Placement.svg
+    let [r, c] = [L - 3, L - 1];
+    let dr = -1;
+    while (c >= 0) {
+        if (dataAreas[r][c]) {
+            dataCoordinates.push([r, c]);
+        }
+        if (dataAreas[r][c - 1]) {
+            dataCoordinates.push([r, c - 1]);
+        }
+        r += dr;
+        if (r === -1) {
+            r = 0;
+            dr = 1;
+            c -= 2;
+        }
+        if (r === L) {
+            r = L - 1;
+            dr = -1;
+            c -= 2;
+        }
+        if (c == 6) {
+            c -= 1;
+        }
+    }
+
+    return dataCoordinates;
 }
 
 function getMaskedQRCode(
@@ -320,7 +387,7 @@ function getEncodingMode(
     L: number,
     maskedQRCode: BinaryGrid,
     maskedQRCodeTable: Table
-): { encodingMode: number; table: Table } {
+): { encodingMode: EncodingMode; table: Table } {
     const coordinates = [
         [L - 2, L - 2],
         [L - 2, L - 1],
@@ -328,7 +395,8 @@ function getEncodingMode(
         [L - 1, L - 1],
     ];
     const encodingModeBits = coordinates.map(([r, c]) => maskedQRCode[r][c]);
-    const encodingMode = parseInt(encodingModeBits.toReversed().join(""), 2);
+    const encodingMode =
+        encodingModes.find(mode => mode.code === encodingModeBits.join("")) || encodingModes[encodingModes.length - 1];
 
     const charTable: Table = range(2).map(i =>
         range(2).map(j => {
@@ -349,25 +417,106 @@ function getEncodingMode(
         }))
     );
 
-    const words = ["", "Numeric", "Alphanumeric", "", "Byte", "", "", "ECI", "Kanji"];
     const descriptionTable = [
-        [{ text: "Encoding mode:" }],
         [
             {
-                text: words[encodingMode],
-                formula: `=INDEX({${words
-                    .map(s => `"${s}"`)
-                    .join(
-                        "; "
-                    )}}, BIN2DEC(%ENCODING_MODE_BITS[1][1]% & %ENCODING_MODE_BITS[1][0]% & %ENCODING_MODE_BITS[0][1]% & %ENCODING_MODE_BITS%) + 1)`,
+                text: encodingMode.description,
+                formula: `=IFERROR(SWITCH(CONCATENATE(%ENCODING_MODE_BITS%:%ENCODING_MODE_BITS[1][1]%), ${encodingModes
+                    .map(encodingMode => `"${encodingMode.code}", "${encodingMode.description}"`)
+                    .join(", ")}), "Unknown")`,
                 ref: "ENCODING_MODE",
             },
+        ],
+        [
+            {
+                text: encodingMode.blockSize,
+                formula: `=SWITCH(R[-1]C[0], ${encodingModes
+                    .map(encodingMode => `"${encodingMode.description}", ${encodingMode.blockSize}`)
+                    .join(", ")})`,
+                ref: "BLOCK_SIZE",
+            },
+            { text: "← Data bits block size" },
         ],
     ];
     return {
         encodingMode,
-        table: blockMatrix([[charTable, bitsTable, {}, descriptionTable]], {}),
+        table: blockMatrix([
+            [{ text: "Encoding mode (from bottom right 2x2 grid):" }],
+            [charTable, bitsTable, {}, descriptionTable],
+        ]),
     };
+}
+
+function getDecodedData(
+    maskedQRCode: BinaryGrid,
+    maskedQRCodeTable: Table,
+    dataCoordinates: [number, number][],
+    encodingMode: EncodingMode
+): Table {
+    const dataBits = dataCoordinates.map(([r, c]) => maskedQRCode[r][c]);
+    const numCodewords = 19;
+    const maxBlockSize = 13;
+
+    function decode(codeword: Bit[], encodingMode: string): string {
+        const int = parseInt(codeword.join(""), 2);
+        switch (encodingMode) {
+            case "Byte":
+                return String.fromCodePoint(int);
+            default:
+                return int.toString();
+        }
+    }
+
+    // DEC2BIN only works up to 2^10, so we need to split a binary string into 2 parts of size [L - d, d].
+    const d = 4;
+    assert(d < encodingMode.blockSize && maxBlockSize - d <= 10);
+
+    const table = [
+        [{ text: "Data bits (starting from bottom right, zigzag upwards and downwards):" }],
+        [
+            {
+                text: dataBits.join(""),
+                formula: `=CONCATENATE(MAP({${dataCoordinates
+                    .map(([r, c]) => `%MASKED_QR_CODE[${r}][${c}]%`)
+                    .join(", ")}}, LAMBDA(s, IF(s<>%WHITE%, 1, 0))))`,
+                ref: "DATA_BITS",
+            },
+        ],
+        [{}],
+        [{ text: "Data bits in blocks:" }, ...range(12).map(_ => ({})), { text: "Decoded:" }],
+        ...range(numCodewords).map(i => [
+            ...range(maxBlockSize).map(j => ({
+                backgroundColor: j < encodingMode.blockSize ? (3 * i + 3) % 10 : undefined,
+                text: j < encodingMode.blockSize ? char(dataBits[i * encodingMode.blockSize + j]) : undefined,
+                formula: `=IF(${j} < %BLOCK_SIZE%, IF(MID(%DATA_BITS%, ${i} * %BLOCK_SIZE% + ${j} + 1, 1)<>"1", %WHITE%, %BLACK%), "")`,
+            })),
+            {
+                text: decode(
+                    dataBits.slice(i * encodingMode.blockSize, (i + 1) * encodingMode.blockSize),
+                    i === 0 ? "Length" : encodingMode.description
+                ),
+                formula: `=LET(
+int, BIN2DEC(MID(%DATA_BITS%, ${i} * %BLOCK_SIZE% + 1, %BLOCK_SIZE% - ${d})) * ${1 << d} + BIN2DEC(MID(%DATA_BITS%, ${
+                    i + 1
+                } * %BLOCK_SIZE% - ${d - 1}, ${d})),
+SWITCH(${i === 0 ? `"Length"` : "%ENCODING_MODE%"},
+    "Byte", CHAR(int),
+    int))`,
+            },
+            {
+                text: i === 0 ? "← Length" : undefined,
+            },
+        ]),
+    ];
+
+    for (let i = 0; i < numCodewords; i++) {
+        for (let j = 0; j < encodingMode.blockSize; j++) {
+            const [r, c] = dataCoordinates[i * encodingMode.blockSize + j];
+            maskedQRCodeTable[r][c].backgroundColor = (3 * i + 3) % 10;
+        }
+    }
+
+    return table;
 }
 
 export function toTable(originalQRCode: BinaryGrid): Table {
@@ -381,10 +530,15 @@ export function toTable(originalQRCode: BinaryGrid): Table {
     const blackCharacter: Table = [[{ text: char(1), ref: "BLACK" }, { text: "← black character" }]];
     const whiteCharacter: Table = [[{ text: char(0), ref: "WHITE" }, { text: "← white character" }]];
 
-    const originalQRCodeTable = toOriginalQRCode(originalQRCode);
+    const originalQRCodeTable = showOriginalQRCode(originalQRCode);
 
     // https://en.wikipedia.org/wiki/QR_code#/media/File:QR_Format_Information.svg
-    const { formatBits, table: formatBitsTable } = getFormatBits(originalQRCode, L, originalQRCodeTable);
+    const formatCoordinates = getFormatCoordinates(L);
+    const { formatBits, table: formatBitsTable } = getFormatBits(
+        originalQRCode,
+        originalQRCodeTable,
+        formatCoordinates
+    );
     const {
         errorCorrectionLevel,
         table: errorCorrectionLevelTable,
@@ -393,42 +547,44 @@ export function toTable(originalQRCode: BinaryGrid): Table {
     const { maskIndex, table: maskIndexTable, description: maskIndexDescription } = getMaskIndex(formatBits);
     const { maskGrid, table: maskGridTable } = getMaskGrid(maskIndex);
 
-    const paddedMaskBitsTable = blockMatrix([[{}], [maskIndexTable]], {});
-    const formatDescriptionTable = blockMatrix(
-        [
-            [errorCorrectionLevelDescription] /* force new line .................... */,
-            [maskIndexDescription],
-            [maskGridTable],
-        ],
-        {}
-    );
-    const formatInfoTable = blockMatrix(
-        [
-            [formatBitsTable] /* force new line */,
-            [{}],
-            [errorCorrectionLevelTable, paddedMaskBitsTable, {}, formatDescriptionTable],
-        ],
-        {}
-    );
+    const paddedMaskBitsTable = blockMatrix([[{}], [maskIndexTable]]);
+    const formatDescriptionTable = blockMatrix([
+        [errorCorrectionLevelDescription] /* force new line .................... */,
+        [maskIndexDescription],
+        [maskGridTable],
+    ]);
+    const formatInfoTable = blockMatrix([
+        [formatBitsTable] /* force new line */,
+        [{}],
+        [errorCorrectionLevelTable, paddedMaskBitsTable, {}, formatDescriptionTable],
+    ]);
 
-    const dataAreas = getDataAreas(L);
+    const dataAreas = getDataAreas(L, formatCoordinates);
+    const dataCoordinates = getDataCoordinates(L, dataAreas);
+
     const { maskedQRCode, table: maskedQRCodeTable } = getMaskedQRCode(originalQRCode, maskGrid, dataAreas);
     const { encodingMode, table: encodingModeTable } = getEncodingMode(L, maskedQRCode, maskedQRCodeTable);
+    const decodedDataTable = getDecodedData(maskedQRCode, maskedQRCodeTable, dataCoordinates, encodingMode);
+    const decodedTable = blockMatrix([
+        [encodingModeTable] /* force new line .................... */,
+        [{}],
+        [decodedDataTable],
+    ]);
 
-    const table = blockMatrix(
-        [
-            [blackCharacter],
-            [whiteCharacter],
-            [{}],
-            [originalQRCodeTable, {}, formatInfoTable],
-            [{}],
-            [{ text: "Apply mask:" }],
-            [maskedQRCodeTable, {}, encodingModeTable],
-        ],
-        {}
-    );
+    const table = blockMatrix([
+        [blackCharacter],
+        [whiteCharacter],
+        [{}],
+        [originalQRCodeTable, {}, formatInfoTable],
+        [{}],
+        [{ text: "Data portions (with mask applied):" }],
+        [maskedQRCodeTable, {}, decodedTable],
+    ]);
 
     for (const row of table) {
+        while (row.length > 1 && Object.keys(row[row.length - 1]).length === 0) {
+            row.pop();
+        }
         for (const cell of row) {
             cell.width = 20;
             cell.height = 20;
