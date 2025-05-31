@@ -94,8 +94,8 @@ function App() {
 
     const nodes = [html`<${ImageInput} setGrid=${setGrid} />`];
     if (grid) {
-        nodes.push(toHtml(html, toTable(grid)));
         nodes.push(html`<${CopyToClipboard} />`);
+        nodes.push(toHtml(html, toTable(grid)));
     }
     return nodes;
 }

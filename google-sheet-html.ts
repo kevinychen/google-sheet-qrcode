@@ -23,6 +23,14 @@ export type Cell = {
 
 export type Table = Cell[][];
 
+/*
+ * Google sheets built-in BIN2DEC only works for numbers up to 2^10.
+ * Use this instead to go up to 2^20.
+ * Usage: `LET(${betterBin2Dec}, betterBin2Dec(...))
+ */
+export const betterBin2Dec =
+    "betterBin2dec, LAMBDA(str, LET(n, LEN(str), d, FLOOR(n / 2), BITLSHIFT(BIN2DEC(MID(str, 1, n - d)), d) + BIN2DEC(MID(str, n - d + 1, d))))";
+
 const refRegex = "[A-Z0-9_]+";
 const numberRegex = "-?[0-9]{1,3}";
 const colors = [
