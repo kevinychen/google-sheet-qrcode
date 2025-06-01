@@ -9,6 +9,7 @@ export type ErrorCorrectionLevel = { name: "H" | "Q" | "M" | "L"; description: s
 export type EncodingMode = { name: string; lengthBlockSize: number; dataBlockSize: number };
 
 function getNumCodewordsList(version: number): { [errorCorrectionLevelName: string]: number[] } {
+    // https://www.thonky.com/qr-code-tutorial/error-correction-table
     switch (version) {
         case 1:
             return { L: [19], M: [16], Q: [13], H: [9] };
@@ -272,17 +273,17 @@ function getErrorCorrectionLevel(
 }
 
 function getMaskGrid(formatBits: Bit[]): { maskGrid: BinaryGrid; table: Table } {
-    // 6x6 mask
-    const masks = [
-        "111111 100000 100100 101010 100100 100000",
-        "101010 010101 101010 101010 010101 101010",
-        "101010 000111 100011 010101 111000 011100",
-        "111111 111000 110110 101010 101101 100011",
-        "111111 000000 111111 000000 111111 000000",
-        "101010 010101 101010 010101 101010 010101",
-        "100100 001001 010010 100100 001001 010010",
-        "100100 100100 100100 100100 100100 100100",
-    ].map(s => s.split(" ").map(array => array.split("").map(c => parseInt(c) as Bit)));
+    const maskFunctions: ((i: number, j: number) => boolean)[] = [
+        (i, j) => ((i * j) % 2) + ((i * j) % 3) === 0,
+        (i, j) => (Math.floor(i / 2) + Math.floor(j / 3)) % 2 === 0,
+        (i, j) => (((i * j) % 3) + i + j) % 2 === 0,
+        (i, j) => (((i * j) % 3) + i * j) % 2 === 0,
+        (i, _) => i % 2 === 0,
+        (i, j) => (i + j) % 2 === 0,
+        (i, j) => (i + j) % 3 === 0,
+        (_, j) => j % 3 === 0,
+    ];
+    const masks = maskFunctions.map(f => range(12).map(i => range(12).map(j => (f(i, j) ? 1 : 0))));
 
     const maskIndex = parseInt(formatBits.slice(2, 5).join(""), 2);
     const maskGrid = masks[maskIndex];
@@ -311,8 +312,8 @@ function getMaskGrid(formatBits: Bit[]): { maskGrid: BinaryGrid; table: Table } 
                 formula: `="Mask " & %MASK_INDEX% & ":"`,
             },
         ],
-        ...range(6).map(r =>
-            range(6).map(c => ({
+        ...range(12).map(r =>
+            range(12).map(c => ({
                 backgroundColor: 4,
                 text: char(maskGrid[r][c]),
                 formula: `=INDEX({${masks
@@ -430,7 +431,7 @@ function getMaskedQRCode(
     maskGrid: BinaryGrid,
     dataAreas: boolean[][]
 ): { maskedQRCode: BinaryGrid; table: Table } {
-    const maskedQRCode = originalQRCode.map((row, r) => row.map((bit, c) => (bit ^ maskGrid[r % 6][c % 6]) as Bit));
+    const maskedQRCode = originalQRCode.map((row, r) => row.map((bit, c) => (bit ^ maskGrid[r % 12][c % 12]) as Bit));
 
     return {
         maskedQRCode,
@@ -439,8 +440,8 @@ function getMaskedQRCode(
                 dataAreas[r][c]
                     ? {
                           text: char(bit),
-                          formula: `=IF(XOR(%ORIGINAL_QR_CODE[${r}][${c}]%<>%WHITE%, %MASK_GRID[${r % 6}][${
-                              c % 6
+                          formula: `=IF(XOR(%ORIGINAL_QR_CODE[${r}][${c}]%<>%WHITE%, %MASK_GRID[${r % 12}][${
+                              c % 12
                           }]%<>%WHITE%), %BLACK%, %WHITE%)`,
                           ref: r === 0 && c === 0 ? "MASKED_QR_CODE" : undefined,
                       }
@@ -797,13 +798,13 @@ export function toTable(originalQRCode: BinaryGrid): Table {
     const { errorCorrectionLevel, table: errorCorrectionLevelTable } = getErrorCorrectionLevel(version, formatBits);
     const { maskGrid, table: maskGridTable } = getMaskGrid(formatBits);
 
-    const paddedMaskGridTable = blockMatrix([[{}, {}, maskGridTable]]);
-    const formatInfoTable = blockMatrix([
-        [formatBitsTable] /* force new line */,
-        [{}],
+    const decodedFormatInfoTable = blockMatrix([
+        [{ text: "Decoded format information:" }],
         [errorCorrectionLevelTable],
-        [paddedMaskGridTable],
+        [{}],
+        [maskGridTable],
     ]);
+    const formatInfoTable = blockMatrix([[formatBitsTable, {}, decodedFormatInfoTable]]);
 
     const dataAreas = getDataAreas(L, version, formatCoordinates);
     const dataCoordinates = getDataCoordinates(L, dataAreas);
