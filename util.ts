@@ -43,3 +43,7 @@ export function range(n: number) {
     }
     return range;
 }
+
+export function sum(list: number[]) {
+    return list.reduce((a, b) => a + b);
+}

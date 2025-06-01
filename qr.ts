@@ -1,25 +1,60 @@
 import { QRCode } from "jsqr";
-import { betterBin2Dec, Cell, Table } from "./google-sheet-html";
-import { assert, blockMatrix, range } from "./util";
+import { betterBin2Dec, Table } from "./google-sheet-html";
+import { assert, blockMatrix, range, sum } from "./util";
 
 export type Bit = 0 | 1;
 export type BinaryGrid = Bit[][];
 export type FormatCoordinates = { horizontal: [number, number][]; vertical: [number, number][] };
-export type ErrorCorrectionLevel = { name: string; description: string };
-export type EncodingMode = { code: string; name: string; blockSize: number };
+export type ErrorCorrectionLevel = { name: "H" | "Q" | "M" | "L"; description: string };
+export type EncodingMode = { name: string; lengthBlockSize: number; dataBlockSize: number };
 
-const errorCorrectionLevels = [
-    { name: "H", description: "HIGH" },
-    { name: "Q", description: "QUARTILE" },
-    { name: "M", description: "MEDIUM" },
-    { name: "L", description: "LOW" },
-];
-const encodingModes = [
-    { code: "?", name: "Unknown", blockSize: 8 },
-    { code: "1000", name: "Numeric", blockSize: 10 },
-    { code: "0100", name: "Alphanumeric", blockSize: 11 },
-    { code: "0010", name: "Byte", blockSize: 8 },
-];
+function getNumCodewordsList(version: number): { [errorCorrectionLevelName: string]: number[] } {
+    switch (version) {
+        case 1:
+            return { L: [19], M: [16], Q: [13], H: [9] };
+        case 2:
+            return { L: [34], M: [28], Q: [22], H: [16] };
+        case 3:
+            return { L: [55], M: [44], Q: [17, 17], H: [13, 13] };
+        case 4:
+            return { L: [80], M: [32, 32], Q: [24, 24], H: [9, 9, 9, 9] };
+        case 5:
+            return { L: [108], M: [43, 43], Q: [15, 15, 16, 16], H: [11, 11, 12, 12] };
+        case 6:
+            return { L: [68, 68], M: [27, 27, 27, 27], Q: [19, 19, 19, 19], H: [15, 15, 15, 15] };
+        case 7:
+            return { L: [78, 78], M: [31, 31, 31, 31], Q: [14, 14, 15, 15, 15, 15], H: [13, 13, 13, 13, 14] };
+        case 8:
+            return { L: [97, 97], M: [38, 38, 39, 39], Q: [18, 18, 18, 18, 19, 19], H: [14, 14, 14, 14, 15, 15] };
+        default:
+            throw new Error();
+    }
+}
+
+function getEncodingModes(version: number): { [code: string]: EncodingMode } {
+    return {
+        "0001": {
+            name: "Numeric",
+            lengthBlockSize: version <= 9 ? 10 : version <= 26 ? 12 : 14,
+            dataBlockSize: 10,
+        },
+        "0010": {
+            name: "Alphanumeric",
+            lengthBlockSize: version <= 9 ? 9 : version <= 26 ? 11 : 13,
+            dataBlockSize: 11,
+        },
+        "0100": {
+            name: "Byte",
+            lengthBlockSize: version <= 9 ? 8 : 16,
+            dataBlockSize: 8,
+        },
+        Unknown: {
+            name: "Unknown",
+            lengthBlockSize: 8,
+            dataBlockSize: 8,
+        },
+    };
+}
 
 export function toBinaryGrid(qrCode: QRCode): BinaryGrid {
     const matrix = qrCode.modules;
@@ -178,68 +213,65 @@ bestOptionIndex
     return { formatBits, table };
 }
 
-function getErrorCorrectionLevel(formatBits: Bit[]): {
-    errorCorrectionLevel: ErrorCorrectionLevel;
-    table: Table;
-    description: Cell;
-} {
+function getErrorCorrectionLevel(
+    version: number,
+    formatBits: Bit[]
+): { errorCorrectionLevel: ErrorCorrectionLevel; table: Table } {
+    const errorCorrectionLevels: ErrorCorrectionLevel[] = [
+        { name: "H", description: "HIGH" },
+        { name: "Q", description: "QUARTILE" },
+        { name: "M", description: "MEDIUM" },
+        { name: "L", description: "LOW" },
+    ];
+
     const errorCorrectionLevel = errorCorrectionLevels[parseInt(formatBits.slice(0, 2).join(""), 2)];
+    const numCodewordsList = getNumCodewordsList(version);
+
+    const mainTable = [
+        [
+            {
+                backgroundColor: 1,
+                text: errorCorrectionLevel.name,
+                formula: `=INDEX({${errorCorrectionLevels
+                    .map(level => `"${level.name}"`)
+                    .join("; ")}}, BIN2DEC(CONCATENATE(%FORMAT_BITS%:%FORMAT_BITS[0][1]%)) + 1)`,
+                ref: "ERROR_CORRECTION_LEVEL",
+            },
+            {
+                backgroundColor: 1,
+            },
+        ],
+    ];
+
+    const descriptionTable = [
+        [
+            {
+                text: `Error correction: ${errorCorrectionLevel.name} (${errorCorrectionLevel.description})`,
+                formula: `="Error correction: " & %ERROR_CORRECTION_LEVEL% & " (" & SWITCH(%ERROR_CORRECTION_LEVEL%, ${errorCorrectionLevels
+                    .map(level => `"${level.name}", "${level.description}"`)
+                    .join(", ")}) & ")"`,
+            },
+        ],
+        [
+            {
+                text: sum(numCodewordsList[errorCorrectionLevel.name]).toString(),
+                formula: `=SWITCH(%ERROR_CORRECTION_LEVEL%, ${Object.entries(numCodewordsList)
+                    .map(([name, numCodewords]) => `"${name}", ${sum(numCodewords)}`)
+                    .join(", ")})`,
+                ref: "NUM_CODEWORDS",
+            },
+            {},
+            { text: "← # codewords" },
+        ],
+    ];
 
     return {
         errorCorrectionLevel,
-        table: [
-            [
-                {
-                    backgroundColor: 1,
-                    text: errorCorrectionLevel.name,
-                    formula: `=INDEX({${errorCorrectionLevels
-                        .map(level => `"${level.name}"`)
-                        .join("; ")}}, BIN2DEC(CONCATENATE(%FORMAT_BITS%:%FORMAT_BITS[0][1]%)) + 1)`,
-                    ref: "ERROR_CORRECTION_LEVEL",
-                },
-                {
-                    backgroundColor: 1,
-                },
-            ],
-        ],
-        description: {
-            text: `Error correction: ${errorCorrectionLevel.name} (${errorCorrectionLevel.description})`,
-            formula: `="Error correction: " & %ERROR_CORRECTION_LEVEL% & " (" & SWITCH(%ERROR_CORRECTION_LEVEL%, ${errorCorrectionLevels
-                .map(level => `"${level.name}", "${level.description}"`)
-                .join(", ")}) & ")"`,
-        },
+        table: blockMatrix([[mainTable, {}, descriptionTable]]),
     };
 }
 
-function getMaskIndex(formatBits: Bit[]): { maskIndex: number; table: Table; description: Cell } {
-    const maskIndex = parseInt(formatBits.slice(2, 5).join(""), 2);
-
-    return {
-        maskIndex,
-        table: [
-            [
-                {
-                    backgroundColor: 4,
-                    text: maskIndex.toString(),
-                    formula: "=BIN2DEC(CONCATENATE(%FORMAT_BITS[0][2]%:%FORMAT_BITS[0][4]%))",
-                    ref: "MASK_INDEX",
-                },
-                {
-                    backgroundColor: 4,
-                },
-                {
-                    backgroundColor: 4,
-                },
-            ],
-        ],
-        description: {
-            text: `Mask ${maskIndex}:`,
-            formula: `="Mask " & %MASK_INDEX% & ":"`,
-        },
-    };
-}
-
-function getMaskGrid(maskIndex: number): { maskGrid: BinaryGrid; table: Table } {
+function getMaskGrid(formatBits: Bit[]): { maskGrid: BinaryGrid; table: Table } {
     // 6x6 mask
     const masks = [
         "111111 100000 100100 101010 100100 100000",
@@ -252,11 +284,34 @@ function getMaskGrid(maskIndex: number): { maskGrid: BinaryGrid; table: Table } 
         "100100 100100 100100 100100 100100 100100",
     ].map(s => s.split(" ").map(array => array.split("").map(c => parseInt(c) as Bit)));
 
+    const maskIndex = parseInt(formatBits.slice(2, 5).join(""), 2);
     const maskGrid = masks[maskIndex];
 
-    return {
-        maskGrid,
-        table: range(6).map(r =>
+    const mainTable = [
+        [
+            {
+                backgroundColor: 4,
+                text: maskIndex.toString(),
+                formula: "=BIN2DEC(CONCATENATE(%FORMAT_BITS[0][2]%:%FORMAT_BITS[0][4]%))",
+                ref: "MASK_INDEX",
+            },
+            {
+                backgroundColor: 4,
+            },
+            {
+                backgroundColor: 4,
+            },
+        ],
+    ];
+
+    const descriptionTable = [
+        [
+            {
+                text: `Mask ${maskIndex}:`,
+                formula: `="Mask " & %MASK_INDEX% & ":"`,
+            },
+        ],
+        ...range(6).map(r =>
             range(6).map(c => ({
                 backgroundColor: 4,
                 text: char(maskGrid[r][c]),
@@ -266,6 +321,11 @@ function getMaskGrid(maskIndex: number): { maskGrid: BinaryGrid; table: Table } 
                 ref: r === 0 && c === 0 ? "MASK_GRID" : undefined,
             }))
         ),
+    ];
+
+    return {
+        maskGrid,
+        table: blockMatrix([[mainTable, {}, descriptionTable]]),
     };
 }
 
@@ -337,7 +397,7 @@ function getDataCoordinates(L: number, dataAreas: boolean[][]): [number, number]
     const dataCoordinates: [number, number][] = [];
 
     // https://en.wikipedia.org/wiki/QR_code#/media/File:QR_Character_Placement.svg
-    let [r, c] = [L - 3, L - 1];
+    let [r, c] = [L - 1, L - 1];
     let dr = -1;
     while (c >= 0) {
         if (dataAreas[r][c]) {
@@ -393,125 +453,189 @@ function getMaskedQRCode(
     };
 }
 
-function getEncodingMode(
-    L: number,
+function getCodewords(
     version: number,
+    errorCorrectionLevel: ErrorCorrectionLevel,
+    dataCoordinates: [number, number][],
     maskedQRCode: BinaryGrid,
     maskedQRCodeTable: Table
-): { encodingMode: EncodingMode; table: Table } {
-    const coordinates = [
-        [L - 2, L - 2],
-        [L - 2, L - 1],
-        [L - 1, L - 2],
-        [L - 1, L - 1],
-    ];
-    const encodingModeBits = coordinates.map(([r, c]) => maskedQRCode[r][c]);
-    const encodingMode = encodingModes.find(mode => mode.code === encodingModeBits.join("")) || encodingModes[0];
+): { codewords: Bit[][]; table: Table } {
+    const numCodewordsList = getNumCodewordsList(version);
+    const numCodewords = numCodewordsList[errorCorrectionLevel.name].reduce((a, b) => a + b);
+    const maxNumCodewords = Math.max(
+        ...Object.values(numCodewordsList).map(numCodewords => numCodewords.reduce((a, b) => a + b))
+    );
 
-    const charTable: Table = range(2).map(i =>
-        range(2).map(j => {
-            const [r, c] = coordinates[2 * i + j];
-            return {
-                backgroundColor: 0,
-                text: char(maskedQRCode[r][c]),
-                formula: `=%MASKED_QR_CODE[${r}][${c}]%`,
-            };
-        })
+    const interleavedCodewords = range(numCodewords).map(i =>
+        dataCoordinates.slice(8 * i, 8 * i + 8).map(([r, c]) => maskedQRCode[r][c])
     );
-    coordinates.forEach(([r, c]) => (maskedQRCodeTable[r][c].backgroundColor = 0));
-    const bitsTable = range(2).map(i =>
-        range(2).map(j => ({
-            text: encodingModeBits[2 * i + j].toString(),
-            formula: `=IF(R[0]C[-2]<>%WHITE%, 1, 0)`,
-            ref: i === 0 && j === 0 ? "ENCODING_MODE_BITS" : undefined,
-        }))
-    );
+
+    const interleavedCodewordsTable = [
+        [{ text: "Codewords (from bottom right):" }],
+        ...range(maxNumCodewords).map(i =>
+            range(8).map(j => {
+                const [r, c] = dataCoordinates[8 * i + j];
+                if (i < numCodewords) {
+                    maskedQRCodeTable[r][c].backgroundColor = (3 * i) % 10;
+                }
+                return {
+                    backgroundColor: maskedQRCodeTable[r][c].backgroundColor,
+                    text: i < numCodewords ? char(interleavedCodewords[i][j]) : undefined,
+                    formula: `=IF(${i} < %NUM_CODEWORDS%, %MASKED_QR_CODE[${r}][${c}]%, "")`,
+                    ref: i === 0 && j === 0 ? "INTERLEAVED_CODEWORDS" : undefined,
+                };
+            })
+        ),
+    ];
+    const indicesTable = [
+        [{ text: "#" }],
+        ...range(maxNumCodewords).map(i => [
+            {
+                text: i < numCodewords ? (i + 1).toString() : undefined,
+                formula: `=IF(${i} < %NUM_CODEWORDS%, ${i + 1}, "")`,
+            },
+        ]),
+    ];
+
+    // For large QR codes, the codewords need to be reordered before decoding
+    // TODO for version ≤ 2, don't include this
+    const interleavings: { [name: string]: number[] } = {};
+    Object.entries(numCodewordsList).forEach(([name, numCodewords]) => {
+        let index = 0;
+        const lists = [];
+        for (let num of numCodewords) {
+            lists.push(range(num).map(n => n + index));
+            index += num;
+        }
+        index = 0;
+        const interleaving: number[] = range(maxNumCodewords).map(_ => maxNumCodewords);
+        while (lists.some(list => list.length > 0)) {
+            for (const list of lists) {
+                if (list.length > 0) {
+                    interleaving[list.shift()!] = index++;
+                }
+            }
+        }
+        interleavings[name] = interleaving;
+    });
+    const codewords = range(numCodewords).map(i => interleavedCodewords[interleavings[errorCorrectionLevel.name][i]]);
+    const codewordsTable = [
+        [{ text: "Uninterleaved (for big codes):" }],
+        ...range(maxNumCodewords).map(i =>
+            range(8).map(j => ({
+                backgroundColor: i === 0 && j < 4 ? 7 : undefined,
+                text: i < numCodewords ? char(codewords[i][j]) : undefined,
+                formula: `=LET(
+new_i, SWITCH(%ERROR_CORRECTION_LEVEL%, ${Object.entries(interleavings)
+                    .map(([name, interleaving]) => `"${name}", ${interleaving[i]}`)
+                    .join(", ")}),
+IF(new_i < %NUM_CODEWORDS%, INDEX(%INTERLEAVED_CODEWORDS%:%INTERLEAVED_CODEWORDS[${
+                    maxNumCodewords - 1
+                }][7]%, new_i + 1, ${j + 1}), ""))`,
+                ref: i === 0 && j === 0 ? "CODEWORDS" : undefined,
+            }))
+        ),
+    ];
+    const matchIndicesTable = [
+        [{ text: "#" }],
+        ...range(maxNumCodewords).map(i => [
+            {
+                text: i < numCodewords ? (interleavings[errorCorrectionLevel.name][i] + 1).toString() : undefined,
+                formula: `=LET(
+new_i, SWITCH(%ERROR_CORRECTION_LEVEL%, ${Object.entries(interleavings)
+                    .map(([name, interleaving]) => `"${name}", ${interleaving[i]}`)
+                    .join(", ")}),
+IF(new_i < %NUM_CODEWORDS%, new_i + 1, ""))`,
+            },
+        ]),
+    ];
+
+    return {
+        codewords,
+        table: blockMatrix([[interleavedCodewordsTable, indicesTable, {}, codewordsTable, matchIndicesTable]]),
+    };
+}
+
+function getEncodingMode(version: number, codewords: Bit[][]): { encodingMode: EncodingMode; table: Table } {
+    const encodingModes = getEncodingModes(version);
+    const encodingModeBits = codewords[0].slice(0, 4);
+    const encodingMode = encodingModes[encodingModeBits.join("")] || encodingModes.Unknown;
+
+    const mainTable = [
+        range(4).map(i => ({
+            backgroundColor: 7,
+            text: char(encodingModeBits[i]),
+            formula: `=%CODEWORDS[0][${i}]%`,
+        })),
+    ];
 
     const descriptionTable = [
         [
             {
                 text: encodingMode.name,
-                formula: `=IFERROR(SWITCH(CONCATENATE(%ENCODING_MODE_BITS%:%ENCODING_MODE_BITS[1][1]%), ${encodingModes
-                    .map(encodingMode => `"${encodingMode.code}", "${encodingMode.name}"`)
+                formula: `=IFERROR(SWITCH(CONCATENATE(ARRAYFORMULA(IF(%CODEWORDS%:%CODEWORDS[0][3]% = %BLACK%, 1, 0))), ${Object.entries(
+                    encodingModes
+                )
+                    .map(([code, encodingMode]) => `"${code}", "${encodingMode.name}"`)
                     .join(", ")}), "Unknown")`,
                 ref: "ENCODING_MODE",
             },
         ],
         [
             {
-                text: encodingMode.blockSize,
-                formula: `=SWITCH(R[-1]C[0], ${encodingModes
-                    .map(encodingMode => `"${encodingMode.name}", ${encodingMode.blockSize}`)
+                text: encodingMode.dataBlockSize,
+                formula: `=SWITCH(R[-1]C[0], ${Object.values(encodingModes)
+                    .map(encodingMode => `"${encodingMode.name}", ${encodingMode.lengthBlockSize}`)
                     .join(", ")})`,
-                ref: "BLOCK_SIZE",
+                ref: "LENGTH_BLOCK_SIZE",
+            },
+            {},
+            { text: "← Length block size" },
+        ],
+        [
+            {
+                text: encodingMode.dataBlockSize,
+                formula: `=SWITCH(R[-2]C[0], ${Object.values(encodingModes)
+                    .map(encodingMode => `"${encodingMode.name}", ${encodingMode.dataBlockSize}`)
+                    .join(", ")})`,
+                ref: "DATA_BLOCK_SIZE",
             },
             {},
             { text: "← Data block size" },
         ],
     ];
+
     return {
         encodingMode,
-        table: blockMatrix([
-            [{ text: "Encoding mode (from bottom right 2x2 grid):" }],
-            [charTable, bitsTable, {}, descriptionTable],
-        ]),
+        table: blockMatrix([[{ text: "Encoding mode (first 4 modules):" }], [mainTable, {}, descriptionTable]]),
     };
 }
 
-function getDecodedData(
-    L: number,
-    version: number,
-    maskedQRCode: BinaryGrid,
-    maskedQRCodeTable: Table,
-    dataCoordinates: [number, number][],
-    encodingMode: EncodingMode
-): Table {
-    function getLengthBlockSizes(version: number): { [name: string]: number } {
-        if (version <= 9) {
-            return {
-                Alphanumeric: 9,
-                Byte: 8,
-                Numeric: 10,
-            };
-        } else if (version <= 26) {
-            return {
-                Alphanumeric: 11,
-                Byte: 16,
-                Numeric: 12,
-            };
-        } else {
-            return {
-                Alphanumeric: 13,
-                Byte: 16,
-                Numeric: 14,
-            };
-        }
+function getDecodedData(L: number, version: number, codewords: Bit[][], encodingMode: EncodingMode): Table {
+    function codewordPos(n: number): [number, number] {
+        return [Math.floor(n / 8), n % 8];
     }
+
+    const encodingModes = getEncodingModes(version);
     const maxLengthBlockSize = 16;
+    const maxDataBlockSize = 11;
 
-    const lengthBlockSizes = getLengthBlockSizes(version);
-    const lengthBlockSize = lengthBlockSizes[encodingMode.name];
-
-    const lengthBits = dataCoordinates.slice(0, lengthBlockSize).map(([r, c]) => maskedQRCode[r][c]);
+    const lengthBlockSize = encodingMode.lengthBlockSize;
+    const lengthBits = range(lengthBlockSize).map(i => {
+        const [r, c] = codewordPos(4 + i);
+        return codewords[r][c];
+    });
     const length = parseInt(lengthBits.join(""), 2);
     const lengthTable = [
-        [
-            { text: "Length block:" },
-            ...range(lengthBlockSize - 2).map(_ => ({})),
-            {
-                text: encodingMode.blockSize,
-                formula: `=SWITCH(%ENCODING_MODE%, ${Object.entries(getLengthBlockSizes(version))
-                    .map(([name, lengthBlockSize]) => `"${name}", ${lengthBlockSize}`)
-                    .join(", ")}, 8)`,
-                ref: "LENGTH_BLOCK_SIZE",
-            },
-        ],
-        dataCoordinates.slice(0, maxLengthBlockSize).map(([r, c], i) => ({
-            backgroundColor: i < lengthBlockSize ? 3 : undefined,
-            text: i < lengthBlockSize ? char(lengthBits[i]) : undefined,
-            formula: `=IF(${i} < %LENGTH_BLOCK_SIZE%, %MASKED_QR_CODE[${r}][${c}]%, "")`,
-            ref: i === 0 ? "LENGTH_BITS" : undefined,
-        })),
+        [{ text: "Length block:" }],
+        range(maxLengthBlockSize).map(i => {
+            const [r, c] = codewordPos(4 + i);
+            return {
+                text: i < lengthBlockSize ? char(lengthBits[i]) : undefined,
+                formula: `=IF(${i} < %LENGTH_BLOCK_SIZE%, %CODEWORDS[${r}][${c}]%, "")`,
+                ref: i === 0 ? "LENGTH_BITS" : undefined,
+            };
+        }),
         [
             {
                 text: length.toString(),
@@ -524,16 +648,14 @@ betterBin2Dec(MID(CONCATENATE(ARRAYFORMULA(IF(%LENGTH_BITS%:%LENGTH_BITS[0][${ma
             { text: "← Length" },
         ],
     ];
-    dataCoordinates.slice(0, lengthBlockSize).forEach(([r, c]) => (maskedQRCodeTable[r][c].backgroundColor = 3));
 
-    const blockSize = encodingMode.blockSize;
-    const maxBlockSize = Math.max(...encodingModes.map(mode => mode.blockSize));
+    const dataBlockSize = encodingMode.dataBlockSize;
     const maxNumBlocks = Math.floor((Math.pow(L, 2) - 225) / 12); // crude estimate
     const dataBlocksTable = [
         [{ text: "Data blocks:" }],
         ...range(maxNumBlocks).map(i =>
-            range(maxBlockSize).map(j => {
-                const [r, c] = dataCoordinates[lengthBlockSize + blockSize * i + j];
+            range(maxDataBlockSize).map(j => {
+                const [r, c] = codewordPos(4 + lengthBlockSize + dataBlockSize * i + j);
                 const cellUsed = {
                     Byte: i < length && j < 8,
                     Numeric:
@@ -541,22 +663,17 @@ betterBin2Dec(MID(CONCATENATE(ARRAYFORMULA(IF(%LENGTH_BITS%:%LENGTH_BITS[0][${ma
                         (i < Math.floor((length + 1) / 3) && j < 7) ||
                         (i < Math.floor((length + 2) / 3) && j < 4),
                 }[encodingMode.name];
-                if (cellUsed) {
-                    // TODO prevent neighboring cells from using same color
-                    maskedQRCodeTable[r][c].backgroundColor = (3 * i + 6) % 10;
-                }
 
-                const [byte_r, byte_c] = dataCoordinates[lengthBlockSizes.Byte + 8 * i + j];
-                const [numeric_r, numeric_c] = dataCoordinates[lengthBlockSizes.Numeric + 10 * i + j];
+                const [byte_r, byte_c] = codewordPos(4 + encodingModes["0100"].lengthBlockSize + 8 * i + j);
+                const [numeric_r, numeric_c] = codewordPos(4 + encodingModes["0001"].lengthBlockSize + 10 * i + j);
                 return {
-                    backgroundColor: maskedQRCodeTable[r][c].backgroundColor,
-                    text: cellUsed ? char(maskedQRCode[r][c]) : undefined,
+                    text: cellUsed ? char(codewords[r][c]) : undefined,
                     formula: `=SWITCH(%ENCODING_MODE%,
-"Byte", IF(AND(${i} < %LENGTH%, ${j} < 8), %MASKED_QR_CODE[${byte_r}][${byte_c}]%, ""),
+"Byte", IF(AND(${i} < %LENGTH%, ${j} < 8), %CODEWORDS[${byte_r}][${byte_c}]%, ""),
 "Numeric", IF(OR(
     AND(${i} < FLOOR(%LENGTH% / 3), ${j} < 10),
     AND(${i} < FLOOR((%LENGTH% + 1) / 3), ${j} < 7),
-    AND(${i} < FLOOR((%LENGTH% + 2) / 3), ${j} < 4)), %MASKED_QR_CODE[${numeric_r}][${numeric_c}]%, ""),
+    AND(${i} < FLOOR((%LENGTH% + 2) / 3), ${j} < 4)), %CODEWORDS[${numeric_r}][${numeric_c}]%, ""),
 ""
 )`,
                     ref: i === 0 && j === 0 ? "DATA_BLOCKS" : undefined,
@@ -568,9 +685,10 @@ betterBin2Dec(MID(CONCATENATE(ARRAYFORMULA(IF(%LENGTH_BITS%:%LENGTH_BITS[0][${ma
     const decodedTable = [
         [{ text: "Decoded:" }],
         ...range(maxNumBlocks).map(i => {
-            const bits = dataCoordinates
-                .slice(lengthBlockSize + blockSize * i, lengthBlockSize + blockSize * (i + 1))
-                .map(([r, c]) => maskedQRCode[r][c]);
+            const bits = range(dataBlockSize).map(j => {
+                const [r, c] = codewordPos(4 + lengthBlockSize + dataBlockSize * i + j);
+                return codewords[r] ? codewords[r][c] : 0;
+            });
             const int = parseInt(bits.join(""), 2);
             const decoded = {
                 Byte: i < length ? String.fromCodePoint(int) : undefined,
@@ -584,7 +702,7 @@ betterBin2Dec(MID(CONCATENATE(ARRAYFORMULA(IF(%LENGTH_BITS%:%LENGTH_BITS[0][${ma
                     text: decoded,
                     formula: `=LET(
 ${betterBin2Dec},
-int, betterBin2Dec(MID(CONCATENATE(ARRAYFORMULA(IF(%DATA_BLOCKS[${i}][0]%:%DATA_BLOCKS[${i}][${maxBlockSize}]% = %BLACK%, 1, 0))), 1, %BLOCK_SIZE%)),
+int, betterBin2Dec(MID(CONCATENATE(ARRAYFORMULA(IF(%DATA_BLOCKS[${i}][0]%:%DATA_BLOCKS[${i}][${maxDataBlockSize}]% = %BLACK%, 1, 0))), 1, %DATA_BLOCK_SIZE%)),
 SWITCH(%ENCODING_MODE%,
 "Byte", IF(${i} < %LENGTH%, CHAR(int), ""),
 "Numeric", IF(${i} < %LENGTH% / 3, IF(${i} = (%LENGTH% - 1) / 3, BITRSHIFT(int, 6), IF(${i} = (%LENGTH% - 2) / 3, BITRSHIFT(int, 3), int)), ""),
@@ -625,32 +743,32 @@ export function toTable(originalQRCode: BinaryGrid): Table {
         originalQRCodeTable,
         formatCoordinates
     );
-    const {
-        errorCorrectionLevel,
-        table: errorCorrectionLevelTable,
-        description: errorCorrectionLevelDescription,
-    } = getErrorCorrectionLevel(formatBits);
-    const { maskIndex, table: maskIndexTable, description: maskIndexDescription } = getMaskIndex(formatBits);
-    const { maskGrid, table: maskGridTable } = getMaskGrid(maskIndex);
+    const { errorCorrectionLevel, table: errorCorrectionLevelTable } = getErrorCorrectionLevel(version, formatBits);
+    const { maskGrid, table: maskGridTable } = getMaskGrid(formatBits);
 
-    const paddedMaskBitsTable = blockMatrix([[{}], [maskIndexTable]]);
-    const formatDescriptionTable = blockMatrix([
-        [errorCorrectionLevelDescription] /* force new line .................... */,
-        [maskIndexDescription],
-        [maskGridTable],
-    ]);
+    const paddedMaskGridTable = blockMatrix([[{}, {}, maskGridTable]]);
     const formatInfoTable = blockMatrix([
         [formatBitsTable] /* force new line */,
         [{}],
-        [errorCorrectionLevelTable, paddedMaskBitsTable, {}, formatDescriptionTable],
+        [errorCorrectionLevelTable],
+        [paddedMaskGridTable],
     ]);
 
     const dataAreas = getDataAreas(L, version, formatCoordinates);
     const dataCoordinates = getDataCoordinates(L, dataAreas);
 
     const { maskedQRCode, table: maskedQRCodeTable } = getMaskedQRCode(originalQRCode, maskGrid, dataAreas);
-    const { encodingMode, table: encodingModeTable } = getEncodingMode(L, version, maskedQRCode, maskedQRCodeTable);
-    const decodedDataTable = getDecodedData(L, version, maskedQRCode, maskedQRCodeTable, dataCoordinates, encodingMode);
+
+    const { codewords, table: codewordsTable } = getCodewords(
+        version,
+        errorCorrectionLevel,
+        dataCoordinates,
+        maskedQRCode,
+        maskedQRCodeTable
+    );
+
+    const { encodingMode, table: encodingModeTable } = getEncodingMode(version, codewords);
+    const decodedDataTable = getDecodedData(L, version, codewords, encodingMode);
     const decodedTable = blockMatrix([
         [encodingModeTable] /* force new line .................... */,
         [{}],
@@ -664,7 +782,7 @@ export function toTable(originalQRCode: BinaryGrid): Table {
         [originalQRCodeTable, {}, formatInfoTable],
         [{}],
         [{ text: "Data portions (with mask applied):" }],
-        [maskedQRCodeTable, {}, decodedTable],
+        [maskedQRCodeTable, {}, codewordsTable, {}, decodedTable],
     ]);
 
     for (const row of table) {
