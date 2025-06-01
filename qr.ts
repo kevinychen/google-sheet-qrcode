@@ -498,6 +498,7 @@ function getCodewords(
     ];
 
     // For large QR codes, the codewords need to be reordered before decoding
+    // https://www.thonky.com/qr-code-tutorial/structure-final-message
     // TODO for version ≤ 2, don't include this
     const interleavings: { [name: string]: number[] } = {};
     Object.entries(numCodewordsList).forEach(([name, numCodewords]) => {
@@ -611,14 +612,19 @@ function getEncodingMode(version: number, codewords: Bit[][]): { encodingMode: E
     };
 }
 
-function getDecodedData(L: number, version: number, codewords: Bit[][], encodingMode: EncodingMode): Table {
+function getDecodedData(
+    L: number,
+    version: number,
+    codewords: Bit[][],
+    encodingMode: EncodingMode
+): { decodedData: string; decodedBlocksTable: Table; decodedDataTable: Table } {
     function codewordPos(n: number): [number, number] {
         return [Math.floor(n / 8), n % 8];
     }
 
     const encodingModes = getEncodingModes(version);
     const maxLengthBlockSize = 16;
-    const maxDataBlockSize = 11;
+    const maxDataBlockSize = 13;
 
     const lengthBlockSize = encodingMode.lengthBlockSize;
     const lengthBits = range(lengthBlockSize).map(i => {
@@ -627,7 +633,12 @@ function getDecodedData(L: number, version: number, codewords: Bit[][], encoding
     });
     const length = parseInt(lengthBits.join(""), 2);
     const lengthTable = [
-        [{ text: "Length block:" }],
+        [
+            {
+                text: `Length block (next ${lengthBlockSize} modules):`,
+                formula: `="Length block (next " & %LENGTH_BLOCK_SIZE% & " modules):"`,
+            },
+        ],
         range(maxLengthBlockSize).map(i => {
             const [r, c] = codewordPos(4 + i);
             return {
@@ -652,11 +663,17 @@ betterBin2Dec(MID(CONCATENATE(ARRAYFORMULA(IF(%LENGTH_BITS%:%LENGTH_BITS[0][${ma
     const dataBlockSize = encodingMode.dataBlockSize;
     const maxNumBlocks = Math.floor((Math.pow(L, 2) - 225) / 12); // crude estimate
     const dataBlocksTable = [
-        [{ text: "Data blocks:" }],
+        [
+            {
+                text: `Data blocks (remaining blocks in groups of ${dataBlockSize}):`,
+                formula: `="Data blocks (remaining blocks in groups of " & %DATA_BLOCK_SIZE% & "):"`,
+            },
+        ],
         ...range(maxNumBlocks).map(i =>
             range(maxDataBlockSize).map(j => {
                 const [r, c] = codewordPos(4 + lengthBlockSize + dataBlockSize * i + j);
                 const cellUsed = {
+                    Alphanumeric: (i < Math.floor(length / 2) && j < 11) || (i < Math.floor((length + 1) / 2) && j < 6),
                     Byte: i < length && j < 8,
                     Numeric:
                         (i < Math.floor(length / 3) && j < 10) ||
@@ -664,11 +681,17 @@ betterBin2Dec(MID(CONCATENATE(ARRAYFORMULA(IF(%LENGTH_BITS%:%LENGTH_BITS[0][${ma
                         (i < Math.floor((length + 2) / 3) && j < 4),
                 }[encodingMode.name];
 
+                const [alphanumeric_r, alphanumeric_c] = codewordPos(
+                    4 + encodingModes["0010"].lengthBlockSize + 11 * i + j
+                );
                 const [byte_r, byte_c] = codewordPos(4 + encodingModes["0100"].lengthBlockSize + 8 * i + j);
                 const [numeric_r, numeric_c] = codewordPos(4 + encodingModes["0001"].lengthBlockSize + 10 * i + j);
                 return {
                     text: cellUsed ? char(codewords[r][c]) : undefined,
                     formula: `=SWITCH(%ENCODING_MODE%,
+"Alphanumeric", IF(OR(
+    AND(${i} < FLOOR(%LENGTH% / 2), ${j} < 11),
+    AND(${i} < FLOOR((%LENGTH% + 1) / 2), ${j} < 6)), %CODEWORDS[${alphanumeric_r}][${alphanumeric_c}]%, ""),
 "Byte", IF(AND(${i} < %LENGTH%, ${j} < 8), %CODEWORDS[${byte_r}][${byte_c}]%, ""),
 "Numeric", IF(OR(
     AND(${i} < FLOOR(%LENGTH% / 3), ${j} < 10),
@@ -682,41 +705,69 @@ betterBin2Dec(MID(CONCATENATE(ARRAYFORMULA(IF(%LENGTH_BITS%:%LENGTH_BITS[0][${ma
         ),
     ];
 
-    const decodedTable = [
-        [{ text: "Decoded:" }],
+    let decodedData = "";
+    const decodedBlocksTable = [
+        [{ text: "Decoded blocks:" }],
         ...range(maxNumBlocks).map(i => {
             const bits = range(dataBlockSize).map(j => {
                 const [r, c] = codewordPos(4 + lengthBlockSize + dataBlockSize * i + j);
                 return codewords[r] ? codewords[r][c] : 0;
             });
             const int = parseInt(bits.join(""), 2);
-            const decoded = {
+            const alphanumericTable = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:";
+            const decodedBlock = {
+                Alphanumeric:
+                    i < length / 2
+                        ? i === (length - 1) / 2
+                            ? alphanumericTable[int >> 5]
+                            : alphanumericTable[Math.floor(int / 45)] + alphanumericTable[int % 45]
+                        : undefined,
                 Byte: i < length ? String.fromCodePoint(int) : undefined,
                 Numeric:
                     i < length / 3
                         ? (i === (length - 1) / 3 ? int >> 6 : i === (length - 2) / 3 ? int >> 3 : int).toString()
                         : undefined,
             }[encodingMode.name];
+            if (decodedBlock) {
+                decodedData += decodedBlock;
+            }
             return [
                 {
-                    text: decoded,
+                    text: decodedBlock,
                     formula: `=LET(
 ${betterBin2Dec},
 int, betterBin2Dec(MID(CONCATENATE(ARRAYFORMULA(IF(%DATA_BLOCKS[${i}][0]%:%DATA_BLOCKS[${i}][${maxDataBlockSize}]% = %BLACK%, 1, 0))), 1, %DATA_BLOCK_SIZE%)),
+alphanumericTable, "${alphanumericTable}",
 SWITCH(%ENCODING_MODE%,
+"Alphanumeric", IF(${i} < %LENGTH% / 2, IF(${i} = (%LENGTH% - 1) / 2,
+    MID(alphanumericTable, BITRSHIFT(int, 5) + 1, 1),
+    MID(alphanumericTable, FLOOR(int / 45) + 1, 1) & MID(alphanumericTable, MOD(int, 45) + 1, 1)), ""),
 "Byte", IF(${i} < %LENGTH%, CHAR(int), ""),
 "Numeric", IF(${i} < %LENGTH% / 3, IF(${i} = (%LENGTH% - 1) / 3, BITRSHIFT(int, 6), IF(${i} = (%LENGTH% - 2) / 3, BITRSHIFT(int, 3), int)), ""),
 ))`,
+                    ref: i === 0 ? "DECODED_BLOCKS" : undefined,
                 },
             ];
         }),
     ];
 
-    return blockMatrix([
-        [lengthTable] /* force new line .................... */,
-        [{}],
-        [dataBlocksTable, {}, decodedTable],
-    ]);
+    return {
+        decodedData,
+        decodedBlocksTable: blockMatrix([
+            [lengthTable] /* force new line .................... */,
+            [{}],
+            [dataBlocksTable, {}, decodedBlocksTable],
+        ]),
+        decodedDataTable: [
+            [{ text: "Decoded data:" }],
+            [
+                {
+                    text: decodedData,
+                    formula: `=CONCATENATE(%DECODED_BLOCKS%:%DECODED_BLOCKS[${maxNumBlocks}][0]%)`,
+                },
+            ],
+        ],
+    };
 }
 
 export function toTable(originalQRCode: BinaryGrid): Table {
@@ -768,12 +819,14 @@ export function toTable(originalQRCode: BinaryGrid): Table {
     );
 
     const { encodingMode, table: encodingModeTable } = getEncodingMode(version, codewords);
-    const decodedDataTable = getDecodedData(L, version, codewords, encodingMode);
+    const { decodedData, decodedBlocksTable, decodedDataTable } = getDecodedData(L, version, codewords, encodingMode);
     const decodedTable = blockMatrix([
         [encodingModeTable] /* force new line .................... */,
         [{}],
-        [decodedDataTable],
+        [decodedBlocksTable],
     ]);
+
+    console.log(`Decoded data: ${decodedData}`);
 
     const table = blockMatrix([
         [binarySymbols],
@@ -782,7 +835,7 @@ export function toTable(originalQRCode: BinaryGrid): Table {
         [originalQRCodeTable, {}, formatInfoTable],
         [{}],
         [{ text: "Data portions (with mask applied):" }],
-        [maskedQRCodeTable, {}, codewordsTable, {}, decodedTable],
+        [maskedQRCodeTable, {}, codewordsTable, {}, decodedTable, decodedDataTable],
     ]);
 
     for (const row of table) {
