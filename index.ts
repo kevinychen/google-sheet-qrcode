@@ -1,9 +1,10 @@
+import { BrowserCodeReader } from "@zxing/browser";
+import Detector from "@zxing/library/esm/core/qrcode/detector/Detector";
 import htm from "htm";
-import jsQR from "jsqr";
 import { h, render } from "preact";
 import { useState } from "preact/hooks";
 import { toHtml } from "./google-sheet-html";
-import { BinaryGrid, toBinaryGrid, toTable } from "./qr";
+import { BinaryGrid, Bit, toTable } from "./qr";
 
 const html = htm.bind(h);
 
@@ -18,20 +19,19 @@ function ImageInput({ setGrid }: ImageInputProps) {
 
         const img = new Image();
         img.onload = () => {
-            const canvas = document.createElement("canvas") as HTMLCanvasElement;
-            canvas.width = img.width;
-            canvas.height = img.height;
-            const ctx = canvas.getContext("2d")!;
-            ctx.drawImage(img, 0, 0);
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const code = jsQR(imageData.data, imageData.width, imageData.height);
-            if (!code) {
-                console.log("No QR code found.");
-                return;
-            }
+            const binaryBitmap = BrowserCodeReader.createBinaryBitmapFromMediaElem(img);
+            const noHints = new Map();
+            const detectorResult = new Detector(binaryBitmap.getBlackMatrix()).detect(noHints);
+            const bits = detectorResult.getBits();
 
-            const grid = toBinaryGrid(code);
-            console.log(JSON.stringify(grid));
+            const grid: BinaryGrid = [];
+            for (let y = 0; y < bits.getHeight(); y++) {
+                const row: Bit[] = [];
+                for (let x = 0; x < bits.getWidth(); x++) {
+                    row.push(bits.get(x, y) ? 1 : 0);
+                }
+                grid.push(row);
+            }
             setGrid(grid);
         };
 

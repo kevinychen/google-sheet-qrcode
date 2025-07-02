@@ -6,8 +6,9 @@
     "dev": "npx parcel index.html"
   },
   "dependencies": {
+    "@zxing/browser": "^0.1.5",
+    "@zxing/library": "^0.21.3",
     "htm": "^3.1.1",
-    "jsqr": "git+https://codeberg.org/blinry/jsQR-with-modules.git",
     "preact": "^10.26.7"
   },
   "devDependencies": {

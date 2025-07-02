@@ -1,4 +1,3 @@
-import { QRCode } from "jsqr";
 import { betterBin2Dec, Table } from "./google-sheet-html";
 import { assert, blockMatrix, range, sum } from "./util";
 
@@ -57,19 +56,6 @@ function getEncodingModes(version: number): { [code: string]: EncodingMode } {
     };
 }
 
-export function toBinaryGrid(qrCode: QRCode): BinaryGrid {
-    const matrix = qrCode.modules;
-    const result: BinaryGrid = [];
-    for (let y = 0; y < matrix.height; y++) {
-        const row: Bit[] = [];
-        for (let x = 0; x < matrix.width; x++) {
-            row.push(matrix.get(x, y) ? 1 : 0);
-        }
-        result.push(row);
-    }
-    return result;
-}
-
 function char(bit: Bit) {
     return bit ? "⬛" : "";
 }
@@ -97,6 +83,7 @@ function getFormatBits(
     formatCoordinates: FormatCoordinates
 ): { formatBits: Bit[]; table: Table } {
     const colors = [1, 1, 4, 4, 4, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7];
+
     function BCH_encode(bits: number) {
         const upperMask = 0b10101;
         const lowerMask = 0b10010;
@@ -129,7 +116,7 @@ function getFormatBits(
     table.push(
         horizontalBits.map((bit, i) => ({
             text: bit.toString(),
-            formula: "=IF(R[-1]C[0]<>%WHITE%, 1, 0)",
+            formula: "=IF(R[-1]C[0]=%BLACK%, 1, 0)",
             ref: i === 0 ? "HORIZONTAL_BITS" : undefined,
         }))
     );
@@ -148,7 +135,7 @@ function getFormatBits(
     table.push(
         verticalBits.map((bit, i) => ({
             text: bit.toString(),
-            formula: "=IF(R[-1]C[0]<>%WHITE%, 1, 0)",
+            formula: "=IF(R[-1]C[0]=%BLACK%, 1, 0)",
             ref: i === 0 ? "VERTICAL_BITS" : undefined,
         }))
     );
@@ -206,7 +193,7 @@ bestOptionIndex
     table.push(
         range(15).map(i => ({
             text: ((bestOption >> (14 - i)) % 2).toString(),
-            formula: "=IF(R[-1]C[0]<>%WHITE%, 1, 0)",
+            formula: "=IF(R[-1]C[0]=%BLACK%, 1, 0)",
             ref: i === 0 ? "FORMAT_BITS" : undefined,
         }))
     );
@@ -440,9 +427,9 @@ function getMaskedQRCode(
                 dataAreas[r][c]
                     ? {
                           text: char(bit),
-                          formula: `=IF(XOR(%ORIGINAL_QR_CODE[${r}][${c}]%<>%WHITE%, %MASK_GRID[${r % 12}][${
+                          formula: `=IF(XOR(%ORIGINAL_QR_CODE[${r}][${c}]%=%BLACK%, %MASK_GRID[${r % 12}][${
                               c % 12
-                          }]%<>%WHITE%), %BLACK%, %WHITE%)`,
+                          }]%=%BLACK%), %BLACK%, %WHITE%)`,
                           ref: r === 0 && c === 0 ? "MASKED_QR_CODE" : undefined,
                       }
                     : {
@@ -653,6 +640,7 @@ function getDecodedData(
                 text: length.toString(),
                 formula: `=LET(
 ${betterBin2Dec},
+
 betterBin2Dec(MID(CONCATENATE(ARRAYFORMULA(IF(%LENGTH_BITS%:%LENGTH_BITS[0][${maxLengthBlockSize}]% = %BLACK%, 1, 0))), 1, %LENGTH_BLOCK_SIZE%)))`,
                 ref: "LENGTH",
             },
@@ -737,8 +725,11 @@ betterBin2Dec(MID(CONCATENATE(ARRAYFORMULA(IF(%LENGTH_BITS%:%LENGTH_BITS[0][${ma
                     text: decodedBlock,
                     formula: `=LET(
 ${betterBin2Dec},
+
 int, betterBin2Dec(MID(CONCATENATE(ARRAYFORMULA(IF(%DATA_BLOCKS[${i}][0]%:%DATA_BLOCKS[${i}][${maxDataBlockSize}]% = %BLACK%, 1, 0))), 1, %DATA_BLOCK_SIZE%)),
+
 alphanumericTable, "${alphanumericTable}",
+
 SWITCH(%ENCODING_MODE%,
 "Alphanumeric", IF(${i} < %LENGTH% / 2, IF(${i} = (%LENGTH% - 1) / 2,
     MID(alphanumericTable, BITRSHIFT(int, 5) + 1, 1),
