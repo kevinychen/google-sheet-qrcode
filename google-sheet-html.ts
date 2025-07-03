@@ -64,7 +64,7 @@ export function toHtml(html: any, table: Table) {
 
     const rows = table.map((row, r) => {
         const cells = row.map((cell, c) => {
-            let style = "white-space:nowrap;";
+            let style = "";
             if (cell.width !== undefined) {
                 style += `width:${cell.width}px;`;
                 style += `max-width:${cell.width}px;`;
