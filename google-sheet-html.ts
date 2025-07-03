@@ -7,7 +7,7 @@ import { assert } from "./util";
 export type Cell = {
     width?: number;
     height?: number;
-    backgroundColor?: number;
+    backgroundColor?: string;
     border?: boolean;
     text?: string;
     formula?: string;
@@ -31,10 +31,8 @@ export type Table = Cell[][];
  */
 export const betterBin2Dec =
     "betterBin2dec, LAMBDA(str, LET(n, LEN(str), d, FLOOR(n / 2), BITLSHIFT(BIN2DEC(MID(str, 1, n - d)), d) + BIN2DEC(MID(str, n - d + 1, d))))";
-
-const refRegex = "[A-Z0-9_]+";
-const numberRegex = "-?[0-9]{1,3}";
-const colors = [
+export const GRAY_COLOR = "#999999";
+export const RAINBOW_COLORS = [
     /* 10 rainbow colors */
     "#e6b8af",
     "#f4cccc",
@@ -46,10 +44,10 @@ const colors = [
     "#cfe2f3",
     "#d9d2e9",
     "#ead1dc",
-
-    /* gray */
-    "#999999",
 ];
+
+const refRegex = "[A-Z0-9_]+";
+const numberRegex = "-?[0-9]{1,3}";
 
 export function toHtml(html: any, table: Table) {
     const refs = new Map();
@@ -76,7 +74,7 @@ export function toHtml(html: any, table: Table) {
                 style += `max-height:${cell.height}px;`;
             }
             if (cell.backgroundColor !== undefined) {
-                style += `background-color:${colors[cell.backgroundColor]};`;
+                style += `background-color:${cell.backgroundColor};`;
             }
             if (cell.border) {
                 style += `border: 1px solid #cccccc`;

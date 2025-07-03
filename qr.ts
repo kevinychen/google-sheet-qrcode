@@ -1,4 +1,4 @@
-import { betterBin2Dec, Table } from "./google-sheet-html";
+import { betterBin2Dec, GRAY_COLOR, RAINBOW_COLORS, Table } from "./google-sheet-html";
 import { assert, blockMatrix, range, sum } from "./util";
 
 export type Bit = 0 | 1;
@@ -60,17 +60,6 @@ function char(bit: Bit) {
     return bit ? "⬛" : "";
 }
 
-function showOriginalQRCode(originalQRCode: BinaryGrid): Table {
-    return originalQRCode.map((row, r) =>
-        row.map((bit, c) => ({
-            border: true,
-            text: char(bit),
-            formula: bit ? "=%BLACK%" : "=%WHITE%",
-            ref: r === 0 && c === 0 ? "ORIGINAL_QR_CODE" : undefined,
-        }))
-    );
-}
-
 function getFormatCoordinates(L: number): FormatCoordinates {
     return {
         horizontal: [0, 1, 2, 3, 4, 5, 7, L - 8, L - 7, L - 6, L - 5, L - 4, L - 3, L - 2, L - 1].map(c => [8, c]),
@@ -78,12 +67,88 @@ function getFormatCoordinates(L: number): FormatCoordinates {
     };
 }
 
+function getDataAreas(L: number, version: number, formatCoordinates: FormatCoordinates): boolean[][] {
+    const dataAreas: boolean[][] = range(L).map(_ => range(L).map(_ => true));
+
+    // Remove finder patterns and separators
+    for (let i = 0; i < 8; i++) {
+        for (let j = 0; j < 8; j++) {
+            dataAreas[i][j] = false;
+            dataAreas[i][L - 1 - j] = false;
+            dataAreas[L - 1 - i][j] = false;
+        }
+    }
+
+    // Remove alignment patterns
+    const numCoordinates = version === 1 ? 1 : Math.floor(version / 7) + 2;
+    const secondCoordinate = [
+        -1, 6, 18, 22, 26, 30, 34, 22, 24, 26, 28, 30, 32, 34, 26, 26, 26, 30, 30, 30, 34, 28, 26, 30, 28, 32, 30, 34,
+        26, 30, 26, 30, 34, 30, 34, 30, 24, 28, 32, 26, 30,
+    ][version];
+    const lastCoordinate = L - 7;
+    const alignmentCoordinates = [
+        6,
+        secondCoordinate,
+        ...range(numCoordinates - 2).map(
+            i => (secondCoordinate * i + lastCoordinate * (numCoordinates - 2 - i)) / (numCoordinates - 2)
+        ),
+    ];
+    for (const r of alignmentCoordinates) {
+        for (const c of alignmentCoordinates) {
+            if (dataAreas[r][c]) {
+                for (let dr = -2; dr <= 2; dr++) {
+                    for (let dc = -2; dc <= 2; dc++) {
+                        dataAreas[r + dr][c + dc] = false;
+                    }
+                }
+            }
+        }
+    }
+
+    // Remove timing patterns
+    for (let i = 8; i < L - 8; i++) {
+        dataAreas[6][i] = false;
+        dataAreas[i][6] = false;
+    }
+
+    // Remove format information
+    formatCoordinates.horizontal.forEach(([r, c]) => (dataAreas[r][c] = false));
+    formatCoordinates.vertical.forEach(([r, c]) => (dataAreas[r][c] = false));
+
+    // Pixel that's always black
+    dataAreas[L - 8][8] = false;
+
+    // Version information (for large codes)
+    if (version >= 7) {
+        for (let i = 0; i < 6; i++) {
+            for (let j = L - 11; j < L - 8; j++) {
+                dataAreas[i][j] = false;
+                dataAreas[j][i] = false;
+            }
+        }
+    }
+
+    return dataAreas;
+}
+
+function showOriginalQRCode(originalQRCode: BinaryGrid, dataAreas: boolean[][]): Table {
+    return originalQRCode.map((row, r) =>
+        row.map((bit, c) => ({
+            border: true,
+            backgroundColor: dataAreas[r][c] ? undefined : GRAY_COLOR,
+            text: char(bit),
+            formula: bit ? "=%BLACK%" : "=%WHITE%",
+            ref: r === 0 && c === 0 ? "ORIGINAL_QR_CODE" : undefined,
+        }))
+    );
+}
+
 function getFormatBits(
     code: BinaryGrid,
     originalQRCodeTable: Table,
     formatCoordinates: FormatCoordinates
 ): { formatBits: Bit[]; table: Table } {
-    const colors = [1, 1, 4, 4, 4, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7];
+    const colors = [1, 1, 4, 4, 4, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7].map(i => RAINBOW_COLORS[i]);
 
     function BCH_encode(bits: number) {
         const upperMask = 0b10101;
@@ -223,7 +288,7 @@ function getErrorCorrectionLevel(
         [
             {
                 border: true,
-                backgroundColor: 1,
+                backgroundColor: RAINBOW_COLORS[1],
                 text: errorCorrectionLevel.name,
                 formula: `=INDEX({${errorCorrectionLevels
                     .map(level => `"${level.name}"`)
@@ -232,7 +297,7 @@ function getErrorCorrectionLevel(
             },
             {
                 border: true,
-                backgroundColor: 1,
+                backgroundColor: RAINBOW_COLORS[1],
             },
         ],
     ];
@@ -285,18 +350,18 @@ function getMaskGrid(formatBits: Bit[]): { maskGrid: BinaryGrid; table: Table } 
         [
             {
                 border: true,
-                backgroundColor: 4,
+                backgroundColor: RAINBOW_COLORS[4],
                 text: maskIndex.toString(),
                 formula: "=BIN2DEC(CONCATENATE(%FORMAT_BITS[0][2]%:%FORMAT_BITS[0][4]%))",
                 ref: "MASK_INDEX",
             },
             {
                 border: true,
-                backgroundColor: 4,
+                backgroundColor: RAINBOW_COLORS[4],
             },
             {
                 border: true,
-                backgroundColor: 4,
+                backgroundColor: RAINBOW_COLORS[4],
             },
         ],
     ];
@@ -311,7 +376,7 @@ function getMaskGrid(formatBits: Bit[]): { maskGrid: BinaryGrid; table: Table } 
         ...range(12).map(r =>
             range(12).map(c => ({
                 border: true,
-                backgroundColor: 4,
+                backgroundColor: RAINBOW_COLORS[4],
                 text: char(maskGrid[r][c]),
                 formula: `=INDEX({${masks
                     .map(mask => (mask[r][c] ? "%BLACK%" : "%WHITE%"))
@@ -325,70 +390,6 @@ function getMaskGrid(formatBits: Bit[]): { maskGrid: BinaryGrid; table: Table } 
         maskGrid,
         table: blockMatrix([[mainTable, {}, descriptionTable]]),
     };
-}
-
-function getDataAreas(L: number, version: number, formatCoordinates: FormatCoordinates): boolean[][] {
-    const dataAreas: boolean[][] = range(L).map(_ => range(L).map(_ => true));
-
-    // Remove finder patterns and separators
-    for (let i = 0; i < 8; i++) {
-        for (let j = 0; j < 8; j++) {
-            dataAreas[i][j] = false;
-            dataAreas[i][L - 1 - j] = false;
-            dataAreas[L - 1 - i][j] = false;
-        }
-    }
-
-    // Remove alignment patterns
-    const numCoordinates = version === 1 ? 1 : Math.floor(version / 7) + 2;
-    const secondCoordinate = [
-        -1, 6, 18, 22, 26, 30, 34, 22, 24, 26, 28, 30, 32, 34, 26, 26, 26, 30, 30, 30, 34, 28, 26, 30, 28, 32, 30, 34,
-        26, 30, 26, 30, 34, 30, 34, 30, 24, 28, 32, 26, 30,
-    ][version];
-    const lastCoordinate = L - 7;
-    const alignmentCoordinates = [
-        6,
-        secondCoordinate,
-        ...range(numCoordinates - 2).map(
-            i => (secondCoordinate * i + lastCoordinate * (numCoordinates - 2 - i)) / (numCoordinates - 2)
-        ),
-    ];
-    for (const r of alignmentCoordinates) {
-        for (const c of alignmentCoordinates) {
-            if (dataAreas[r][c]) {
-                for (let dr = -2; dr <= 2; dr++) {
-                    for (let dc = -2; dc <= 2; dc++) {
-                        dataAreas[r + dr][c + dc] = false;
-                    }
-                }
-            }
-        }
-    }
-
-    // Remove timing patterns
-    for (let i = 8; i < L - 8; i++) {
-        dataAreas[6][i] = false;
-        dataAreas[i][6] = false;
-    }
-
-    // Remove format information
-    formatCoordinates.horizontal.forEach(([r, c]) => (dataAreas[r][c] = false));
-    formatCoordinates.vertical.forEach(([r, c]) => (dataAreas[r][c] = false));
-
-    // Pixel that's always black
-    dataAreas[L - 8][8] = false;
-
-    // Version information (for large codes)
-    if (version >= 7) {
-        for (let i = 0; i < 6; i++) {
-            for (let j = L - 11; j < L - 8; j++) {
-                dataAreas[i][j] = false;
-                dataAreas[j][i] = false;
-            }
-        }
-    }
-
-    return dataAreas;
 }
 
 function getDataCoordinates(L: number, dataAreas: boolean[][]): [number, number][] {
@@ -445,7 +446,7 @@ function getMaskedQRCode(
                       }
                     : {
                           border: true,
-                          backgroundColor: 10,
+                          backgroundColor: GRAY_COLOR,
                           ref: r === 0 && c === 0 ? "MASKED_QR_CODE" : undefined,
                       }
             )
@@ -476,7 +477,7 @@ function getCodewords(
             range(8).map(j => {
                 const [r, c] = dataCoordinates[8 * i + j];
                 if (i < numCodewords) {
-                    maskedQRCodeTable[r][c].backgroundColor = (3 * i) % 10;
+                    maskedQRCodeTable[r][c].backgroundColor = RAINBOW_COLORS[(3 * i) % 10];
                 }
                 return {
                     border: true,
@@ -526,7 +527,7 @@ function getCodewords(
         ...range(maxNumCodewords).map(i =>
             range(8).map(j => ({
                 border: true,
-                backgroundColor: i === 0 && j < 4 ? 7 : undefined,
+                backgroundColor: i === 0 && j < 4 ? RAINBOW_COLORS[7] : undefined,
                 text: i < numCodewords ? char(codewords[i][j]) : undefined,
                 formula: `=LET(
 new_i, SWITCH(%ERROR_CORRECTION_LEVEL%, ${Object.entries(interleavings)
@@ -567,7 +568,7 @@ function getEncodingMode(version: number, codewords: Bit[][]): { encodingMode: E
     const mainTable = [
         range(4).map(i => ({
             border: true,
-            backgroundColor: 7,
+            backgroundColor: RAINBOW_COLORS[7],
             text: char(encodingModeBits[i]),
             formula: `=%CODEWORDS[0][${i}]%`,
         })),
@@ -795,10 +796,12 @@ export function toTable(originalQRCode: BinaryGrid): Table {
         [{ border: true, text: char(0), ref: "WHITE" }, {}, { text: "← white character" }],
     ];
 
-    const originalQRCodeTable = showOriginalQRCode(originalQRCode);
+    const formatCoordinates = getFormatCoordinates(L);
+    const dataAreas = getDataAreas(L, version, formatCoordinates);
+
+    const originalQRCodeTable = showOriginalQRCode(originalQRCode, dataAreas);
 
     // https://en.wikipedia.org/wiki/QR_code#/media/File:QR_Format_Information.svg
-    const formatCoordinates = getFormatCoordinates(L);
     const { formatBits, table: formatBitsTable } = getFormatBits(
         originalQRCode,
         originalQRCodeTable,
@@ -815,7 +818,6 @@ export function toTable(originalQRCode: BinaryGrid): Table {
     ]);
     const formatInfoTable = blockMatrix([[formatBitsTable, {}, decodedFormatInfoTable]]);
 
-    const dataAreas = getDataAreas(L, version, formatCoordinates);
     const dataCoordinates = getDataCoordinates(L, dataAreas);
 
     const { maskedQRCode, table: maskedQRCodeTable } = getMaskedQRCode(originalQRCode, maskGrid, dataAreas);
