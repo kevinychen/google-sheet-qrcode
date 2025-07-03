@@ -471,23 +471,24 @@ function getCodewords(
         dataCoordinates.slice(8 * i, 8 * i + 8).map(([r, c]) => maskedQRCode[r][c])
     );
 
-    const interleavedCodewordsTable = [
+    const interleavedCodewordsTable = range(maxNumCodewords).map(i =>
+        range(8).map(j => {
+            const [r, c] = dataCoordinates[8 * i + j];
+            if (i < numCodewords) {
+                maskedQRCodeTable[r][c].backgroundColor = RAINBOW_COLORS[(3 * i) % 10];
+            }
+            return {
+                className: i < numCodewords ? "cell" : undefined,
+                backgroundColor: maskedQRCodeTable[r][c].backgroundColor,
+                text: i < numCodewords ? char(interleavedCodewords[i][j]) : undefined,
+                formula: `=IF(${i} < %NUM_CODEWORDS%, %MASKED_QR_CODE[${r}][${c}]%, "")`,
+                ref: i === 0 && j === 0 ? "INTERLEAVED_CODEWORDS" : undefined,
+            };
+        })
+    );
+    const interleavedCodewordsLabeledTable = [
         [{ text: "Codewords (from bottom right):" }],
-        ...range(maxNumCodewords).map(i =>
-            range(8).map(j => {
-                const [r, c] = dataCoordinates[8 * i + j];
-                if (i < numCodewords) {
-                    maskedQRCodeTable[r][c].backgroundColor = RAINBOW_COLORS[(3 * i) % 10];
-                }
-                return {
-                    className: i < numCodewords ? "cell" : undefined,
-                    backgroundColor: maskedQRCodeTable[r][c].backgroundColor,
-                    text: i < numCodewords ? char(interleavedCodewords[i][j]) : undefined,
-                    formula: `=IF(${i} < %NUM_CODEWORDS%, %MASKED_QR_CODE[${r}][${c}]%, "")`,
-                    ref: i === 0 && j === 0 ? "INTERLEAVED_CODEWORDS" : undefined,
-                };
-            })
-        ),
+        ...interleavedCodewordsTable,
     ];
     const indicesTable = [
         [{ text: "#" }],
@@ -499,9 +500,17 @@ function getCodewords(
         ]),
     ];
 
+    // There's no interleaving for small QR codes
+    if (version <= 2) {
+        interleavedCodewordsTable[0][0].ref = "CODEWORDS";
+        return {
+            codewords: interleavedCodewords,
+            table: blockMatrix([[interleavedCodewordsLabeledTable, indicesTable]]),
+        };
+    }
+
     // For large QR codes, the codewords need to be reordered before decoding
     // https://www.thonky.com/qr-code-tutorial/structure-final-message
-    // TODO for version ≤ 2, don't include this
     const interleavings: { [name: string]: number[] } = {};
     Object.entries(numCodewordsList).forEach(([name, numCodewords]) => {
         let index = 0;
@@ -556,7 +565,7 @@ IF(new_i < %NUM_CODEWORDS%, new_i + 1, ""))`,
 
     return {
         codewords,
-        table: blockMatrix([[interleavedCodewordsTable, indicesTable, {}, codewordsTable, matchIndicesTable]]),
+        table: blockMatrix([[interleavedCodewordsLabeledTable, indicesTable, {}, codewordsTable, matchIndicesTable]]),
     };
 }
 
