@@ -8,6 +8,7 @@ export type Cell = {
     width?: number;
     height?: number;
     backgroundColor?: number;
+    border?: boolean;
     text?: string;
     formula?: string;
 
@@ -76,6 +77,9 @@ export function toHtml(html: any, table: Table) {
             }
             if (cell.backgroundColor !== undefined) {
                 style += `background-color:${colors[cell.backgroundColor]};`;
+            }
+            if (cell.border) {
+                style += `border: 1px solid #cccccc`;
             }
 
             // replace %ref% in the formula with e.g. R[0]C[1]
