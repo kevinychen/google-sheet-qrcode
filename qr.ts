@@ -439,9 +439,9 @@ function getMaskedQRCode(
                     ? {
                           className: "cell",
                           text: char(bit),
-                          formula: `=IF(XOR(%ORIGINAL_QR_CODE[${r}][${c}]%=%BLACK%, %MASK_GRID[${r % 12}][${
+                          formula: `=LET(module, %ORIGINAL_QR_CODE[${r}][${c}]%, mask, %MASK_GRID[${r % 12}][${
                               c % 12
-                          }]%=%BLACK%), %BLACK%, %WHITE%)`,
+                          }]%=%BLACK%, SWITCH(module, %BLACK%, IF(mask, %WHITE%, %BLACK%), %WHITE%, IF(mask, %BLACK%, %WHITE%), module))`,
                           ref: r === 0 && c === 0 ? "MASKED_QR_CODE" : undefined,
                       }
                     : {
