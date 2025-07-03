@@ -5,10 +5,10 @@
 import { assert } from "./util";
 
 export type Cell = {
+    className?: string;
     width?: number;
     height?: number;
-    backgroundColor?: string;
-    border?: boolean;
+    backgroundColor?: string /* hex value */;
     text?: string;
     formula?: string;
 
@@ -76,9 +76,6 @@ export function toHtml(html: any, table: Table) {
             if (cell.backgroundColor !== undefined) {
                 style += `background-color:${cell.backgroundColor};`;
             }
-            if (cell.border) {
-                style += `border: 1px solid #cccccc`;
-            }
 
             // replace %ref% in the formula with e.g. R[0]C[1]
             let formula = cell.formula;
@@ -108,7 +105,7 @@ export function toHtml(html: any, table: Table) {
                 break;
             }
 
-            return html`<td style=${style} data-sheets-formula=${formula}>${cell.text}</td>`;
+            return html`<td class=${cell.className} style=${style} data-sheets-formula=${formula}>${cell.text}</td>`;
         });
 
         return html`<tr>
@@ -119,7 +116,7 @@ export function toHtml(html: any, table: Table) {
     return html`
         <div id="output-grid">
             <google-sheets-html-origin>
-                <table cellspacing="0" cellpadding="0" style="font-size:10pt;">
+                <table cellspacing="0" cellpadding="0" style="font-size:9pt;">
                     <tbody>
                         ${rows}
                     </tbody>

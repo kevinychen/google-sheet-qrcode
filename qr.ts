@@ -134,7 +134,7 @@ function getDataAreas(L: number, version: number, formatCoordinates: FormatCoord
 function showOriginalQRCode(originalQRCode: BinaryGrid, dataAreas: boolean[][]): Table {
     return originalQRCode.map((row, r) =>
         row.map((bit, c) => ({
-            border: true,
+            className: "cell",
             backgroundColor: dataAreas[r][c] ? undefined : GRAY_COLOR,
             text: char(bit),
             formula: bit ? "=%BLACK%" : "=%WHITE%",
@@ -173,7 +173,7 @@ function getFormatBits(
     table.push([{ text: "Horizontal format information:" }]);
     table.push(
         formatCoordinates.horizontal.map(([r, c], i) => ({
-            border: true,
+            className: "cell",
             backgroundColor: colors[i],
             text: char(horizontalBits[i]),
             formula: `=%ORIGINAL_QR_CODE[${r}][${c}]%`,
@@ -193,7 +193,7 @@ function getFormatBits(
     table.push([{ text: "Vertical format information:" }]);
     table.push(
         formatCoordinates.vertical.map(([r, c], i) => ({
-            border: true,
+            className: "cell",
             backgroundColor: colors[i],
             text: char(verticalBits[i]),
             formula: `=%ORIGINAL_QR_CODE[${r}][${c}]%`,
@@ -251,7 +251,7 @@ bestOptionIndex
     const formatBits = range(15).map(i => ((bestOption >> (14 - i)) % 2) as Bit);
     table.push(
         range(15).map(i => ({
-            border: true,
+            className: "cell",
             backgroundColor: colors[i],
             text: char(formatBits[i]),
             formula: `=INDEX({${BCH_options.map(option => ((option >> (14 - i)) % 2 ? "%BLACK%" : "%WHITE%")).join(
@@ -287,7 +287,7 @@ function getErrorCorrectionLevel(
     const mainTable = [
         [
             {
-                border: true,
+                className: "cell",
                 backgroundColor: RAINBOW_COLORS[1],
                 text: errorCorrectionLevel.name,
                 formula: `=INDEX({${errorCorrectionLevels
@@ -296,7 +296,7 @@ function getErrorCorrectionLevel(
                 ref: "ERROR_CORRECTION_LEVEL",
             },
             {
-                border: true,
+                className: "cell",
                 backgroundColor: RAINBOW_COLORS[1],
             },
         ],
@@ -349,18 +349,18 @@ function getMaskGrid(formatBits: Bit[]): { maskGrid: BinaryGrid; table: Table } 
     const mainTable = [
         [
             {
-                border: true,
+                className: "cell",
                 backgroundColor: RAINBOW_COLORS[4],
                 text: maskIndex.toString(),
                 formula: "=BIN2DEC(CONCATENATE(%FORMAT_BITS[0][2]%:%FORMAT_BITS[0][4]%))",
                 ref: "MASK_INDEX",
             },
             {
-                border: true,
+                className: "cell",
                 backgroundColor: RAINBOW_COLORS[4],
             },
             {
-                border: true,
+                className: "cell",
                 backgroundColor: RAINBOW_COLORS[4],
             },
         ],
@@ -375,7 +375,7 @@ function getMaskGrid(formatBits: Bit[]): { maskGrid: BinaryGrid; table: Table } 
         ],
         ...range(12).map(r =>
             range(12).map(c => ({
-                border: true,
+                className: "cell",
                 backgroundColor: RAINBOW_COLORS[4],
                 text: char(maskGrid[r][c]),
                 formula: `=INDEX({${masks
@@ -437,7 +437,7 @@ function getMaskedQRCode(
             row.map((bit, c) =>
                 dataAreas[r][c]
                     ? {
-                          border: true,
+                          className: "cell",
                           text: char(bit),
                           formula: `=IF(XOR(%ORIGINAL_QR_CODE[${r}][${c}]%=%BLACK%, %MASK_GRID[${r % 12}][${
                               c % 12
@@ -445,7 +445,7 @@ function getMaskedQRCode(
                           ref: r === 0 && c === 0 ? "MASKED_QR_CODE" : undefined,
                       }
                     : {
-                          border: true,
+                          className: "cell",
                           backgroundColor: GRAY_COLOR,
                           ref: r === 0 && c === 0 ? "MASKED_QR_CODE" : undefined,
                       }
@@ -480,7 +480,7 @@ function getCodewords(
                     maskedQRCodeTable[r][c].backgroundColor = RAINBOW_COLORS[(3 * i) % 10];
                 }
                 return {
-                    border: true,
+                    className: i < numCodewords ? "cell" : undefined,
                     backgroundColor: maskedQRCodeTable[r][c].backgroundColor,
                     text: i < numCodewords ? char(interleavedCodewords[i][j]) : undefined,
                     formula: `=IF(${i} < %NUM_CODEWORDS%, %MASKED_QR_CODE[${r}][${c}]%, "")`,
@@ -526,7 +526,7 @@ function getCodewords(
         [{ text: "Uninterleaved (for big codes):" }],
         ...range(maxNumCodewords).map(i =>
             range(8).map(j => ({
-                border: true,
+                className: i < numCodewords ? "cell" : undefined,
                 backgroundColor: i === 0 && j < 4 ? RAINBOW_COLORS[7] : undefined,
                 text: i < numCodewords ? char(codewords[i][j]) : undefined,
                 formula: `=LET(
@@ -567,7 +567,7 @@ function getEncodingMode(version: number, codewords: Bit[][]): { encodingMode: E
 
     const mainTable = [
         range(4).map(i => ({
-            border: true,
+            className: "cell",
             backgroundColor: RAINBOW_COLORS[7],
             text: char(encodingModeBits[i]),
             formula: `=%CODEWORDS[0][${i}]%`,
@@ -646,7 +646,7 @@ function getDecodedData(
         range(maxLengthBlockSize).map(i => {
             const [r, c] = codewordPos(4 + i);
             return {
-                border: i < lengthBlockSize,
+                className: i < lengthBlockSize ? "cell" : undefined,
                 text: i < lengthBlockSize ? char(lengthBits[i]) : undefined,
                 formula: `=IF(${i} < %LENGTH_BLOCK_SIZE%, %CODEWORDS[${r}][${c}]%, "")`,
                 ref: i === 0 ? "LENGTH_BITS" : undefined,
@@ -693,7 +693,7 @@ betterBin2Dec(MID(CONCATENATE(ARRAYFORMULA(IF(%LENGTH_BITS%:%LENGTH_BITS[0][${ma
                 const [byte_r, byte_c] = codewordPos(4 + encodingModes["0100"].lengthBlockSize + 8 * i + j);
                 const [numeric_r, numeric_c] = codewordPos(4 + encodingModes["0001"].lengthBlockSize + 10 * i + j);
                 return {
-                    border: cellUsed,
+                    className: cellUsed ? "cell" : undefined,
                     text: cellUsed ? char(codewords[r][c]) : undefined,
                     formula: `=SWITCH(%ENCODING_MODE%,
 "Alphanumeric", IF(OR(
@@ -792,8 +792,8 @@ export function toTable(originalQRCode: BinaryGrid): Table {
     const version = (L - 17) / 4;
 
     const binarySymbols: Table = [
-        [{ border: true, text: char(1), ref: "BLACK" }, {}, { text: "← black character" }],
-        [{ border: true, text: char(0), ref: "WHITE" }, {}, { text: "← white character" }],
+        [{ className: "cell", text: char(1), ref: "BLACK" }, {}, { text: "← black character" }],
+        [{ className: "cell", text: char(0), ref: "WHITE" }, {}, { text: "← white character" }],
     ];
 
     const formatCoordinates = getFormatCoordinates(L);
@@ -840,14 +840,21 @@ export function toTable(originalQRCode: BinaryGrid): Table {
 
     console.log(`Decoded data: ${decodedData}`);
 
+    const originalQRCodeLabeledTable = blockMatrix([
+        [{ text: `Version ${version} QR code (${L}x${L})` }],
+        [originalQRCodeTable],
+    ]);
+    const maskedQRCodeLabeledTable = blockMatrix([
+        [{ text: "Data portions (with mask applied):" }],
+        [maskedQRCodeTable],
+    ]);
+
     const table = blockMatrix([
         [binarySymbols],
         [{}],
-        [{ text: `Version ${version} QR code (${L}x${L})` }],
-        [originalQRCodeTable, {}, formatInfoTable],
+        [originalQRCodeLabeledTable, {}, formatInfoTable],
         [{}],
-        [{ text: "Data portions (with mask applied):" }],
-        [maskedQRCodeTable, {}, codewordsTable, {}, decodedTable],
+        [maskedQRCodeLabeledTable, {}, codewordsTable, {}, decodedTable],
     ]);
 
     for (const row of table) {
