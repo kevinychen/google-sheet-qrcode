@@ -11,28 +11,61 @@ const BLACK = `"⬛"`;
 const WHITE = `""`;
 const FORMAT_COLORS = [1, 1, 4, 4, 4, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7].map(i => RAINBOW_COLORS[i]);
 
+// https://www.thonky.com/qr-code-tutorial/error-correction-table
+const NUM_CODEWORDS_LIST: { [key: number]: { [errorCorrectionLevel: string]: number[] } } = {
+    1: { L: [1, 19], M: [1, 16], Q: [1, 13], H: [1, 9] },
+    2: { L: [1, 34], M: [1, 28], Q: [1, 22], H: [1, 16] },
+    3: { L: [1, 55], M: [1, 44], Q: [2, 17], H: [2, 13] },
+    4: { L: [1, 80], M: [2, 32], Q: [2, 24], H: [4, 9] },
+    5: { L: [1, 108], M: [2, 43], Q: [2, 15, 2, 16], H: [2, 11, 2, 12] },
+    6: { L: [2, 68], M: [4, 27], Q: [4, 19], H: [4, 15] },
+    7: { L: [2, 78], M: [4, 31], Q: [2, 14, 4, 15], H: [4, 13, 1, 14] },
+    8: { L: [2, 97], M: [2, 38, 2, 39], Q: [4, 18, 2, 19], H: [4, 14, 2, 15] },
+    9: { L: [2, 116], M: [3, 36, 2, 37], Q: [4, 16, 4, 17], H: [4, 12, 4, 13] },
+    10: { L: [2, 68, 2, 69], M: [4, 43, 1, 44], Q: [6, 19, 2, 20], H: [6, 15, 2, 16] },
+    11: { L: [4, 81], M: [1, 50, 4, 51], Q: [4, 22, 4, 23], H: [3, 12, 8, 13] },
+    12: { L: [2, 92, 2, 93], M: [6, 36, 2, 37], Q: [4, 20, 6, 21], H: [7, 14, 4, 15] },
+    13: { L: [4, 107], M: [8, 37, 1, 38], Q: [8, 20, 4, 21], H: [12, 11, 4, 12] },
+    14: { L: [3, 115, 1, 116], M: [4, 40, 5, 41], Q: [11, 16, 5, 17], H: [11, 12, 5, 13] },
+    15: { L: [5, 87, 1, 88], M: [5, 41, 5, 42], Q: [5, 24, 7, 25], H: [11, 12, 7, 13] },
+    16: { L: [5, 98, 1, 99], M: [7, 45, 3, 46], Q: [15, 19, 2, 20], H: [3, 15, 13, 16] },
+    17: { L: [1, 107, 5, 108], M: [10, 46, 1, 47], Q: [1, 22, 15, 23], H: [2, 14, 17, 15] },
+    18: { L: [5, 120, 1, 121], M: [9, 43, 4, 44], Q: [17, 22, 1, 23], H: [2, 14, 19, 15] },
+    19: { L: [3, 113, 4, 114], M: [3, 44, 11, 45], Q: [17, 21, 4, 22], H: [9, 13, 16, 14] },
+    20: { L: [3, 107, 5, 108], M: [3, 41, 13, 42], Q: [15, 24, 5, 25], H: [15, 15, 10, 16] },
+    21: { L: [4, 116, 4, 117], M: [17, 42], Q: [17, 22, 6, 23], H: [19, 16, 6, 17] },
+    22: { L: [2, 111, 7, 112], M: [17, 46], Q: [7, 24, 16, 25], H: [34, 13] },
+    23: { L: [4, 121, 5, 122], M: [4, 47, 14, 48], Q: [11, 24, 14, 25], H: [16, 15, 14, 16] },
+    24: { L: [6, 117, 4, 118], M: [6, 45, 14, 46], Q: [11, 24, 16, 25], H: [30, 16, 2, 17] },
+    25: { L: [8, 106, 4, 107], M: [8, 47, 13, 48], Q: [7, 24, 22, 25], H: [22, 15, 13, 16] },
+    26: { L: [10, 114, 2, 115], M: [19, 46, 4, 47], Q: [28, 22, 6, 23], H: [33, 16, 4, 17] },
+    27: { L: [8, 122, 4, 123], M: [22, 45, 3, 46], Q: [8, 23, 26, 24], H: [12, 15, 28, 16] },
+    28: { L: [3, 117, 10, 118], M: [3, 45, 23, 46], Q: [4, 24, 31, 25], H: [11, 15, 31, 16] },
+    29: { L: [7, 116, 7, 117], M: [21, 45, 7, 46], Q: [1, 23, 37, 24], H: [19, 15, 26, 16] },
+    30: { L: [5, 115, 10, 116], M: [19, 47, 10, 48], Q: [15, 24, 25, 25], H: [23, 15, 25, 16] },
+    31: { L: [13, 115, 3, 116], M: [2, 46, 29, 47], Q: [42, 24, 1, 25], H: [23, 15, 28, 16] },
+    32: { L: [17, 115], M: [10, 46, 23, 47], Q: [10, 24, 35, 25], H: [19, 15, 35, 16] },
+    33: { L: [17, 115, 1, 116], M: [14, 46, 21, 47], Q: [29, 24, 19, 25], H: [11, 15, 46, 16] },
+    34: { L: [13, 115, 6, 116], M: [14, 46, 23, 47], Q: [44, 24, 7, 25], H: [59, 16, 1, 17] },
+    35: { L: [12, 121, 7, 122], M: [12, 47, 26, 48], Q: [39, 24, 14, 25], H: [22, 15, 41, 16] },
+    36: { L: [6, 121, 14, 122], M: [6, 47, 34, 48], Q: [46, 24, 10, 25], H: [2, 15, 64, 16] },
+    37: { L: [17, 122, 4, 123], M: [29, 46, 14, 47], Q: [49, 24, 10, 25], H: [24, 15, 46, 16] },
+    38: { L: [4, 122, 18, 123], M: [13, 46, 32, 47], Q: [48, 24, 14, 25], H: [42, 15, 32, 16] },
+    39: { L: [20, 117, 4, 118], M: [40, 47, 7, 48], Q: [43, 24, 22, 25], H: [10, 15, 67, 16] },
+    40: { L: [19, 118, 6, 119], M: [18, 47, 31, 48], Q: [34, 24, 34, 25], H: [20, 15, 61, 16] },
+};
+
 function getNumCodewordsList(version: number): { [errorCorrectionLevelName: string]: number[] } {
-    // https://www.thonky.com/qr-code-tutorial/error-correction-table
-    switch (version) {
-        case 1:
-            return { L: [19], M: [16], Q: [13], H: [9] };
-        case 2:
-            return { L: [34], M: [28], Q: [22], H: [16] };
-        case 3:
-            return { L: [55], M: [44], Q: [17, 17], H: [13, 13] };
-        case 4:
-            return { L: [80], M: [32, 32], Q: [24, 24], H: [9, 9, 9, 9] };
-        case 5:
-            return { L: [108], M: [43, 43], Q: [15, 15, 16, 16], H: [11, 11, 12, 12] };
-        case 6:
-            return { L: [68, 68], M: [27, 27, 27, 27], Q: [19, 19, 19, 19], H: [15, 15, 15, 15] };
-        case 7:
-            return { L: [78, 78], M: [31, 31, 31, 31], Q: [14, 14, 15, 15, 15, 15], H: [13, 13, 13, 13, 14] };
-        case 8:
-            return { L: [97, 97], M: [38, 38, 39, 39], Q: [18, 18, 18, 18, 19, 19], H: [14, 14, 14, 14, 15, 15] };
-        default:
-            throw new Error();
-    }
+    return Object.fromEntries(
+        Object.entries(NUM_CODEWORDS_LIST[version]).map(([errorCorrectionLevel, runLenEncodedNumCodewords]) => {
+            const numCodewords = [];
+            for (let i = 0; i < runLenEncodedNumCodewords.length; i += 2) {
+                const [repeat, number] = runLenEncodedNumCodewords.slice(i, i + 2);
+                numCodewords.push(...range(repeat).map(_ => number));
+            }
+            return [errorCorrectionLevel, numCodewords];
+        })
+    );
 }
 
 function getEncodingModes(version: number): { [code: string]: EncodingMode } {
@@ -163,7 +196,17 @@ function showOriginalQRCode(
         })
     );
 
-    return blockMatrix([[{ text: "You can use https://TODO to convert an image into a grid." }], [table]]);
+    return blockMatrix([
+        [
+            {
+                text: "Copy this page to Google Sheets to toggle the modules.",
+                formula: `=HYPERLINK(
+"TODO",
+"Click to toggle the modules, or use this page to convert an image into a pastable grid.")`,
+            },
+        ],
+        [table],
+    ]);
 }
 
 function getOriginalFormatBits(
@@ -177,6 +220,9 @@ function getOriginalFormatBits(
             [
                 {
                     text: "The colored modules encode the format information. They are repeated horizontally and vertically.",
+                    formula: `=HYPERLINK(
+"https://www.thonky.com/qr-code-tutorial/format-version-information#put-the-format-string-into-the-qr-code",
+"The colored modules encode the format information. They are repeated horizontally and vertically.")`,
                 },
             ],
             formatCoordinates.horizontal.map(([r, c], i) => ({
@@ -241,6 +287,9 @@ bestOptionIndex
     table.push([
         {
             text: "Here is the format information after error correction:",
+            formula: `=HYPERLINK(
+"https://www.thonky.com/qr-code-tutorial/format-version-information#generate-error-correction-bits-for-format-string",
+"Here is the format information after error correction:")`,
         },
     ]);
     table.push(
@@ -262,6 +311,7 @@ function getErrorCorrectionLevel(formatBits: Bit[]): {
     errorCorrectionLevel: ErrorCorrectionLevel;
     table: Table;
 } {
+    // Note the indexes here are the post-masked ones (the index has been XORed with 3)
     const errorCorrectionLevels: ErrorCorrectionLevel[] = [
         { name: "H", description: "HIGH" },
         { name: "Q", description: "QUARTILE" },
@@ -271,7 +321,14 @@ function getErrorCorrectionLevel(formatBits: Bit[]): {
     const errorCorrectionLevel = errorCorrectionLevels[parseInt(formatBits.slice(0, 2).join(""), 2)];
 
     const table: Table = [];
-    table.push([{ text: "The first 2 modules encode the error correction for the rest of the QR Code." }]);
+    table.push([
+        {
+            text: "The first 2 modules encode the error correction for the rest of the QR Code.",
+            formula: `=HYPERLINK(
+"https://en.wikipedia.org/wiki/QR_code#/media/File:QR_Format_Information.svg",
+"The first 2 modules encode the error correction for the rest of the QR Code.")`,
+        },
+    ]);
     table.push([
         ...range(2).map(i => ({
             className: "cell",
@@ -306,6 +363,7 @@ function getErrorCorrectionLevel(formatBits: Bit[]): {
 }
 
 function getMaskGrid(formatBits: Bit[]): { maskGrid: BinaryGrid; table: Table } {
+    // Note the indexes here are the post-masked ones (the index has been XORed with 5)
     const maskFunctions: ((i: number, j: number) => boolean)[] = [
         (i, j) => ((i * j) % 2) + ((i * j) % 3) === 0,
         (i, j) => (Math.floor(i / 2) + Math.floor(j / 3)) % 2 === 0,
@@ -322,7 +380,14 @@ function getMaskGrid(formatBits: Bit[]): { maskGrid: BinaryGrid; table: Table } 
     const maskGrid = masks[maskIndex];
 
     const table: Table = [];
-    table.push([{ text: "The next 3 modules encode the mask." }]);
+    table.push([
+        {
+            text: "The next 3 modules encode the mask.",
+            formula: `=HYPERLINK(
+"https://en.wikipedia.org/wiki/QR_code#/media/File:QR_Format_Information.svg",
+"The next 3 modules encode the mask.")`,
+        },
+    ]);
     table.push([
         ...range(3).map(i => ({
             className: "cell",
@@ -423,7 +488,10 @@ maskedModule & "         🌈" & IF(${index} < %NUM_CODEWORDS%, ${(index * 3) % 
                         : {
                               className: "cell",
                               backgroundColor: GRAY_COLOR,
-                              formula: `="         🌈G"`,
+                              text: maskGrid[r % 12][c % 12] ? "◻️" : "",
+                              formula: `=LET(
+mask, %MASK_GRID[${r % 12}][${c % 12}]%=${BLACK},
+IF(mask, "◻️", "") & "         🌈G")`,
                               ref: r === 0 && c === 0 ? "MASKED_QR_CODE" : undefined,
                           };
                 }),
@@ -471,13 +539,13 @@ function getCodewords(
         [
             {
                 text: "Read codewords (sets of 8 modules)",
-                formula: `="Read codewords (sets of 8
-modules) starting from the
-bottom right.
+                formula: `=HYPERLINK(
+"https://www.thonky.com/qr-code-tutorial/module-placement-matrix#step-6-place-the-data-bits",
+"Read codewords (sets of 8 modules)
+starting from the bottom right.
 
-A version ${version} QR code with " & %ERROR_CORRECTION_LEVEL% & "
-error correction can encode
-up to " & %NUM_CODEWORDS% & " codewords."`,
+A version ${version} QR code with " & %ERROR_CORRECTION_LEVEL% & " error
+correction can encode " & %NUM_CODEWORDS% & " codewords.")`,
             },
         ],
         ...interleavedCodewordsTable,
@@ -573,7 +641,14 @@ function getEncodingMode(
     const encodingMode = encodingModes[encodingModeBits.join("")] || encodingModes.Unknown;
 
     const table: Table = [];
-    table.push([{ text: "The first 4 modules are the encoding mode." }]);
+    table.push([
+        {
+            text: "The first 4 modules are the encoding mode.",
+            formula: `=HYPERLINK(
+"https://www.thonky.com/qr-code-tutorial/data-encoding#step-3-add-the-mode-indicator",
+"The first 4 modules are the encoding mode.")`,
+        },
+    ]);
     table.push([
         ...range(4).map(i => ({
             className: "cell",
@@ -628,7 +703,9 @@ function getLength(codewords: Bit[][], encodingMode: EncodingMode): { length: nu
     table.push([
         {
             text: `The next ${lengthBlockSize} modules encode the data length.`,
-            formula: `="The next " & %LENGTH_BLOCK_SIZE% & " modules encode the data length."`,
+            formula: `=HYPERLINK(
+"https://www.thonky.com/qr-code-tutorial/data-encoding#step-4-add-the-character-count-indicator",
+"The next " & %LENGTH_BLOCK_SIZE% & " modules encode the data length.")`,
         },
     ]);
     table.push([
@@ -671,8 +748,10 @@ function getDecodedData(
     const dataBlocksTable = [
         [
             {
-                text: `Take remaining modules in groups of ${dataBlockSize}.`,
-                formula: `="Take remaining modules in groups of " & %DATA_BLOCK_SIZE% & "."`,
+                text: `Take remaining modules in groups of ${dataBlockSize}, and decode them:`,
+                formula: `=HYPERLINK(
+"https://www.thonky.com/qr-code-tutorial/data-encoding#step-3-encode-using-the-selected-mode",
+"Take remaining modules in groups of " & %DATA_BLOCK_SIZE% & ", and decode them:")`,
             },
         ],
         ...range(maxNumBlocks).map(i =>
@@ -714,12 +793,7 @@ function getDecodedData(
 
     let decodedData = "";
     const decodedBlocksTable = [
-        [
-            {
-                text: "Decoded:",
-                formula: `=HYPERLINK("https://www.thonky.com/qr-code-tutorial/byte-mode-encoding", "Decoded")`,
-            },
-        ],
+        [{}],
         ...range(maxNumBlocks).map(i => {
             const bits = range(dataBlockSize).map(j => {
                 const [r, c] = codewordPos(4 + encodingMode.lengthBlockSize + dataBlockSize * i + j);
@@ -767,7 +841,7 @@ SWITCH(%ENCODING_MODE%,
     ];
 
     const decodedDataTable = [
-        [{ text: "Message:" }],
+        [{ text: "Final message:" }],
         [
             {
                 text: decodedData,
@@ -778,7 +852,7 @@ SWITCH(%ENCODING_MODE%,
 
     return {
         decodedData,
-        table: blockMatrix([[dataBlocksTable, {}, {}, {}, decodedBlocksTable, {}, {}, decodedDataTable]]),
+        table: blockMatrix([[dataBlocksTable, {}, {}, {}, decodedBlocksTable, {}, decodedDataTable]]),
     };
 }
 

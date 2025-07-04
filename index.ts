@@ -120,11 +120,14 @@ const v2: BinaryGrid = [
 
 function App() {
     const [grid, setGrid] = useState(v1);
+    const table = toTable(grid);
+
+    console.log(`table dimensions: ${table.length} x ${Math.max(...table.map(row => row.length))}`);
 
     const nodes = [html`<${ImageInput} setGrid=${setGrid} />`];
     if (grid) {
         nodes.push(html`<${CopyToClipboard} />`);
-        nodes.push(toHtml(html, toTable(grid)));
+        nodes.push(toHtml(html, table));
     }
     return nodes;
 }
