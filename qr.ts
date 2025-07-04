@@ -196,17 +196,7 @@ function showOriginalQRCode(
         })
     );
 
-    return blockMatrix([
-        [
-            {
-                text: "Copy this page to Google Sheets to toggle the modules.",
-                formula: `=HYPERLINK(
-"TODO",
-"Click to toggle the modules, or use this page to convert an image into a pastable grid.")`,
-            },
-        ],
-        [table],
-    ]);
+    return table;
 }
 
 function getOriginalFormatBits(
@@ -856,7 +846,7 @@ SWITCH(%ENCODING_MODE%,
     };
 }
 
-export function toTable(originalQRCode: BinaryGrid): Table {
+export function toTable(originalQRCode: BinaryGrid, raw = false): Table {
     const L = originalQRCode.length;
 
     assert(L >= 21 && L <= 177 && L % 4 === 1, "Invalid QR code size");
@@ -870,6 +860,28 @@ export function toTable(originalQRCode: BinaryGrid): Table {
     const dataAreas = getDataAreas(L, version, formatCoordinates);
 
     const originalQRCodeTable = showOriginalQRCode(originalQRCode, formatCoordinates, dataAreas);
+
+    if (raw) {
+        for (const row of originalQRCodeTable) {
+            for (const cell of row) {
+                cell.width = 20;
+                cell.height = 20;
+            }
+        }
+        return originalQRCodeTable;
+    }
+
+    const labeledOriginalQRCodeTable = blockMatrix([
+        [
+            {
+                text: "Copy this page to Google Sheets to toggle the modules.",
+                formula: `=HYPERLINK(
+"http://kevinychen.github.io/google-sheet-qr-code?raw",
+"Click to toggle the modules, or use this page to convert an image into a pastable grid.")`,
+            },
+        ],
+        [originalQRCodeTable],
+    ]);
 
     // https://en.wikipedia.org/wiki/QR_code#/media/File:QR_Format_Information.svg
     const { originalFormatBits, table: originalFormatBitsTable } = getOriginalFormatBits(
@@ -933,7 +945,7 @@ export function toTable(originalQRCode: BinaryGrid): Table {
 
     const table: Table = blockMatrix([
         [{ text: `Version ${version} QR code (${L}x${L})` }],
-        [originalQRCodeTable, {}, formatInfoTable],
+        [labeledOriginalQRCodeTable, {}, formatInfoTable],
         [{}],
         [maskedQRCodeTable, {}, codewordsTable, {}, decodedTable],
         [{}],
