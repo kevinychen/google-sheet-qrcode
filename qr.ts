@@ -876,7 +876,7 @@ export function toTable(originalQRCode: BinaryGrid, raw = false): Table {
             {
                 text: "Copy this page to Google Sheets to toggle the modules.",
                 formula: `=HYPERLINK(
-"http://kevinychen.github.io/google-sheet-qr-code?raw",
+"http://kevinychen.github.io/google-sheet-qrcode?raw",
 "Click to toggle the modules, or use this page to convert an image into a pastable grid.")`,
             },
         ],
