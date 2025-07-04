@@ -9,6 +9,7 @@ export type Cell = {
     width?: number;
     height?: number;
     backgroundColor?: string /* hex value */;
+    fontFamily?: "Roboto Mono, monospace";
     text?: string;
     formula?: string;
 
@@ -75,6 +76,9 @@ export function toHtml(html: any, table: Table) {
             }
             if (cell.backgroundColor !== undefined) {
                 style += `background-color:${cell.backgroundColor};`;
+            }
+            if (cell.fontFamily !== undefined) {
+                style += `font-family:${cell.fontFamily}`;
             }
 
             // replace %ref% in the formula with e.g. R[0]C[1]

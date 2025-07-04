@@ -25,7 +25,7 @@ function fromBitMatrix(bits: BitMatrix): BinaryGrid {
     return grid;
 }
 
-function generateQRCode(content: string, errorCorrectionLevel = ErrorCorrectionLevel.L): BinaryGrid {
+function generateQRCode(content: string, errorCorrectionLevel: ErrorCorrectionLevel): BinaryGrid {
     const qrCode = Encoder.encode(content, errorCorrectionLevel, NO_HINTS).getMatrix();
     const grid: BinaryGrid = [];
     for (let y = 0; y < qrCode.getHeight(); y++) {
@@ -88,7 +88,7 @@ function CopyToClipboard() {
 
 function App() {
     const [grid, setGrid] = useState(undefined);
-    // const [grid, setGrid] = useState(generateQRCode("Hello!"));
+    // const [grid, setGrid] = useState(generateQRCode("Hello!", ErrorCorrectionLevel.M));
 
     const nodes = [html`<${ImageInput} setGrid=${setGrid} />`];
     if (grid) {

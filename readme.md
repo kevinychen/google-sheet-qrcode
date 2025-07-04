@@ -11,7 +11,7 @@ More "drastic" input changes are supported too, such as changing the encoding mo
 
 ![Demo 2](docs/demo2.gif)
 
-This also comes with a tool to convert an image of a QR code into a binary matrix that can be pasted into the Google Sheet:
+This also comes with [a tool](https://kevinychen.github.io/google-sheet-qrcode/?raw) to convert an image of a QR Code into a binary matrix that can be pasted into the Google Sheet:
 
 ![Demo 3](docs/demo3.gif)
 

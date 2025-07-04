@@ -246,7 +246,7 @@ function getFormatBits(originalFormatBits: Bit[]): { formatBits: Bit[]; table: T
 
     // The 15 bits in both the horizontal format information and vertical format information are
     // encoded with a BCH(15, 5) code. Find the option (out of 2^5 options) that has the closest
-    // hamming distance to the format information in the QR code.
+    // hamming distance to the format information in the QR Code.
     const originalFormatInt = parseInt(originalFormatBits.join(""), 2);
     const hamming = BCH_options.map(val => (originalFormatInt ^ val).toString(2).replace("0", "").length);
     const bestOptionIndex = hamming.indexOf(Math.min(...hamming));
@@ -459,7 +459,7 @@ function getMaskedQRCode(
     return {
         maskedQRCode,
         table: [
-            [{ text: "The mask is XORed with the data portions of the QR code." }],
+            [{ text: "The mask is XORed with the data portions of the QR Code." }],
             ...maskedQRCode.map((row, r) => [
                 ...row.map((bit, c) => {
                     const index = codewordIndices[r][c];
@@ -534,7 +534,7 @@ function getCodewords(
 "Read codewords (sets of 8 modules)
 starting from the bottom right.
 
-A version ${version} QR code with " & %ERROR_CORRECTION_LEVEL% & " error
+A version ${version} QR Code with " & %ERROR_CORRECTION_LEVEL% & " error
 correction can encode " & %NUM_CODEWORDS% & " codewords.")`,
             },
         ],
@@ -550,7 +550,7 @@ correction can encode " & %NUM_CODEWORDS% & " codewords.")`,
         ]),
     ];
 
-    // For large QR codes, the codewords need to be reordered before decoding
+    // For large QR Codes, the codewords need to be reordered before decoding
     // https://www.thonky.com/qr-code-tutorial/structure-final-message
     const interleavings: { [name: string]: number[] } = {};
     Object.entries(numCodewordsList).forEach(([name, numCodewords]) => {
@@ -734,7 +734,9 @@ function getDecodedData(
     const maxDataBlockSize = 13;
 
     const dataBlockSize = encodingMode.dataBlockSize;
-    const maxNumBlocks = Math.floor((Math.pow(L, 2) - 225) / 12); // crude estimate
+    const numCodewordsList = getNumCodewordsList(version);
+    const maxNumBlocks =
+        Math.max(...Object.values(numCodewordsList).map(numCodewords => numCodewords.reduce((a, b) => a + b))) - 2;
     const dataBlocksTable = [
         [
             {
@@ -809,6 +811,7 @@ function getDecodedData(
             }
             return [
                 {
+                    fontFamily: "Roboto Mono, monospace",
                     text: decodedBlock,
                     formula: `=LET(
 ${betterBin2Dec},
@@ -834,6 +837,7 @@ SWITCH(%ENCODING_MODE%,
         [{ text: "Final message:" }],
         [
             {
+                fontFamily: "Roboto Mono, monospace",
                 text: decodedData,
                 formula: `=CONCATENATE(%DECODED_BLOCKS%:%DECODED_BLOCKS[${maxNumBlocks}][0]%)`,
             },
@@ -849,9 +853,9 @@ SWITCH(%ENCODING_MODE%,
 export function toTable(originalQRCode: BinaryGrid, raw = false): Table {
     const L = originalQRCode.length;
 
-    assert(L >= 21 && L <= 177 && L % 4 === 1, "Invalid QR code size");
+    assert(L >= 21 && L <= 177 && L % 4 === 1, "Invalid QR Code size");
     for (const row of originalQRCode) {
-        assert(row.length === L, "QR code must be a square");
+        assert(row.length === L, "QR Code must be a square");
     }
 
     const version = (L - 17) / 4;
@@ -941,14 +945,18 @@ export function toTable(originalQRCode: BinaryGrid, raw = false): Table {
         [numCodewordsCell, { text: "# codewords" }],
         [lengthBlockSizeCell, { text: "Length block size" }],
         [dataBlockSizeCell, { text: "Data block size" }],
+        [
+            {
+                formula: `=HYPERLINK("https://github.com/kevinychen/google-sheet-qrcode", "https://github.com/kevinychen/google-sheet-qrcode")`,
+            },
+        ],
     ]);
 
     const table: Table = blockMatrix([
-        [{ text: `Version ${version} QR code (${L}x${L})` }],
+        [{ text: `Version ${version} QR Code (${L}x${L})` }],
         [labeledOriginalQRCodeTable, {}, formatInfoTable],
         [{}],
-        [maskedQRCodeTable, {}, codewordsTable, {}, decodedTable],
-        [{}],
+        [maskedQRCodeTable, codewordsTable, {}, decodedTable],
         [extraCellsTable],
     ]);
 
