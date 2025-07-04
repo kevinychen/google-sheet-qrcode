@@ -2,7 +2,7 @@
   "name": "google-sheet-qrcode",
   "version": "1.0.0",
   "scripts": {
-    "build": "npx parcel build index.html",
+    "build": "npx parcel build index.html --dist-dir docs",
     "dev": "npx parcel index.html"
   },
   "dependencies": {
