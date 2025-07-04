@@ -67,7 +67,7 @@ betterBin2Dec(MID(CONCATENATE(ARRAYFORMULA(IF(LEFT(%LENGTH_BITS%:%LENGTH_BITS[0]
     AND(${t} < FLOOR((%LENGTH% + 1) / 3), ${e} < 7),
     AND(${t} < FLOOR((%LENGTH% + 2) / 3), ${e} < 4)), %CODEWORDS[${p}][${g}]%, ""),
 ""
-)`,ref:0===t&&0===e?"DATA_BLOCKS":void 0}}))],c="",f=[[{}],...sN(s).map(t=>{let e=parseInt(sN(a).map(e=>{let[o,i]=sX(4+n.lengthBlockSize+a*t+e);return r[o]?r[o][i]:0}).join(""),2),i="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:",s={Alphanumeric:t<o/2?t===(o-1)/2?i[e>>5]:i[Math.floor(e/45)]+i[e%45]:void 0,Byte:t<o?String.fromCodePoint(e):void 0,Numeric:t<o/3?(t===(o-1)/3?e>>6:t===(o-2)/3?e>>3:e).toString():void 0}[n.name];return s&&(c+=s),[{fontFamily:"Roboto Mono, monospace",text:s,formula:`=LET(
+)`,ref:0===t&&0===e?"DATA_BLOCKS":void 0}}))],c="",f=[[{}],...sN(s).map(t=>{let e=parseInt(sN(a).map(e=>{let[o,i]=sX(4+n.lengthBlockSize+a*t+e);return r[o]?r[o][i]:0}).join(""),2),i="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:",s={Alphanumeric:t<o/2?t===(o-1)/2?i[e>>5]:i[Math.floor(e/45)]+i[e%45]:void 0,Byte:t<o?String.fromCodePoint(e):void 0,Numeric:t<o/3?t===(o-1)/3?(e>>6).toString():t===(o-2)/3?(e>>3).toString().padStart(2,"0"):e.toString().padStart(3,"0"):void 0}[n.name];return s&&(c+=s),[{fontFamily:"Roboto Mono, monospace",text:s,formula:`=LET(
 ${sM},
 
 int, betterBin2Dec(MID(CONCATENATE(ARRAYFORMULA(IF(LEFT(%DATA_BLOCKS[${t}][0]%:%DATA_BLOCKS[${t}][13]%, 1) = ${sF}, 1, 0))), 1, %DATA_BLOCK_SIZE%)),
@@ -79,7 +79,10 @@ SWITCH(%ENCODING_MODE%,
     MID(alphanumericTable, BITRSHIFT(int, 5) + 1, 1),
     MID(alphanumericTable, FLOOR(int / 45) + 1, 1) & MID(alphanumericTable, MOD(int, 45) + 1, 1)), ""),
 "Byte", IF(${t} < %LENGTH%, CHAR(int), ""),
-"Numeric", IF(${t} < %LENGTH% / 3, IF(${t} = (%LENGTH% - 1) / 3, BITRSHIFT(int, 6), IF(${t} = (%LENGTH% - 2) / 3, BITRSHIFT(int, 3), int)), ""),
+"Numeric", IF(${t} < %LENGTH% / 3,
+    IF(${t} = (%LENGTH% - 1) / 3,
+        TEXT(BITRSHIFT(int, 6), "0"),
+        IF(${t} = (%LENGTH% - 2) / 3, TEXT(BITRSHIFT(int, 3), "00"), TEXT(int, "000"))), ""),
 ))`,ref:0===t?"DECODED_BLOCKS":void 0}]})],h=[[{text:"Final message:"}],[{fontFamily:"Roboto Mono, monospace",text:c,formula:`=CONCATENATE(%DECODED_BLOCKS%:%DECODED_BLOCKS[${s}][0]%)`}]];return{decodedData:c,table:sR([[u,{},{},{},f,{},h]])}}(0,n,C,I,O),M=sR([[S],[{}],[R],[{}],[D]]);console.log(`Decoded data: ${N}`);let P=sR([[{text:"Internal state"}],[l,{text:"Format information error correction"}],[A,{text:"# codewords"}],[T,{text:"Length block size"}],[b,{text:"Data block size"}],[{formula:'=HYPERLINK("https://github.com/kevinychen/google-sheet-qrcode", "https://github.com/kevinychen/google-sheet-qrcode")'}]]),B=sR([[{text:`Version ${n} QR Code (${r}x${r})`}],[s,{},_],[{}],[v,E,{},M],[P]]);for(let t of B){for(;t.length>1&&0===Object.keys(t[t.length-1]).length;)t.pop();for(let e of t)e.width=20,e.height=20}return B}(t,new URLSearchParams(window.location.search).has("raw"));console.log(`table dimensions: ${e.length} x ${Math.max(...e.map(t=>t.length))}`),r.push(sz`<${sY} />`),r.push(function(t,e){let r=new Map;e.forEach((t,e)=>{t.forEach((t,n)=>{t.ref&&(sO(t.ref.match(sL),`Ref ${t.ref} must match pattern ${sL}`),sO(!r.has(t.ref),`Duplicate ref ${t.ref} found in table`),r.set(t.ref,[e,n]))})});let n=e.map((e,n)=>{let o=e.map((e,o)=>{let i,a="";void 0!==e.width&&(a+=`width:${e.width}px;max-width:${e.width}px;`),void 0!==e.height&&(a+=`height:${e.height}px;max-height:${e.height}px;`),void 0!==e.backgroundColor&&(a+=`background-color:${e.backgroundColor};`),void 0!==e.fontFamily&&(a+=`font-family:${e.fontFamily}`);let s=e.formula;for(;s;){if(i=s.match(`%(${sL})%`)){let t=i[1];if(r.has(t)){let[e,i]=r.get(t);s=s.replace(`%${t}%`,`R[${e-n}]C[${i-o}]`);continue}}if(i=s.match(`%(${sL})\\[(${sx})]\\[(${sx})]%`)){let t=i[1],e=parseInt(i[2]),a=parseInt(i[3]);if(r.has(t)){let[i,u]=r.get(t);s=s.replace(`%${t}[${e}][${a}]%`,`R[${i-n+e}]C[${u-o+a}]`);continue}}break}return t`<td class=${e.className} style=${a} data-sheets-formula=${s}>${e.text}</td>`});return t`<tr>
             ${o}
         </tr>`});return t`

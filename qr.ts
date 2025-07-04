@@ -803,7 +803,11 @@ function getDecodedData(
                 Byte: i < length ? String.fromCodePoint(int) : undefined,
                 Numeric:
                     i < length / 3
-                        ? (i === (length - 1) / 3 ? int >> 6 : i === (length - 2) / 3 ? int >> 3 : int).toString()
+                        ? i === (length - 1) / 3
+                            ? (int >> 6).toString()
+                            : i === (length - 2) / 3
+                            ? (int >> 3).toString().padStart(2, "0")
+                            : int.toString().padStart(3, "0")
                         : undefined,
             }[encodingMode.name];
             if (decodedBlock) {
@@ -825,7 +829,10 @@ SWITCH(%ENCODING_MODE%,
     MID(alphanumericTable, BITRSHIFT(int, 5) + 1, 1),
     MID(alphanumericTable, FLOOR(int / 45) + 1, 1) & MID(alphanumericTable, MOD(int, 45) + 1, 1)), ""),
 "Byte", IF(${i} < %LENGTH%, CHAR(int), ""),
-"Numeric", IF(${i} < %LENGTH% / 3, IF(${i} = (%LENGTH% - 1) / 3, BITRSHIFT(int, 6), IF(${i} = (%LENGTH% - 2) / 3, BITRSHIFT(int, 3), int)), ""),
+"Numeric", IF(${i} < %LENGTH% / 3,
+    IF(${i} = (%LENGTH% - 1) / 3,
+        TEXT(BITRSHIFT(int, 6), "0"),
+        IF(${i} = (%LENGTH% - 2) / 3, TEXT(BITRSHIFT(int, 3), "00"), TEXT(int, "000"))), ""),
 ))`,
                     ref: i === 0 ? "DECODED_BLOCKS" : undefined,
                 },
