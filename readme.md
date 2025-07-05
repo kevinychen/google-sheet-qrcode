@@ -30,7 +30,7 @@ Alternatively, generate from source:
 
 ### Development
 
-Run `npm run dev` and go to `http://localhost:1234`.
+Run `npm run dev` and go to http://localhost:1234.
 
-When merging a change, run `npm run build` and commit the changes to the `docs/google-sheet-qrcode*` files.
+Before committing a change, run `npm run build` and include the changes to the [docs](./docs) directory.
 
